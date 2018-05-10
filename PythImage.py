@@ -10,7 +10,8 @@ import os
 import numpy as np
 from skimage.external.tifffile import TiffFile, TiffWriter
 import collections
-from itertools import product
+from itertools import product, chain
+from skimage.draw import polygon, polygon_perimeter, ellipse, line
  
 
 ##Add channel, remove channel, extract channel etc.
@@ -21,14 +22,16 @@ class PythImage(object):
    
     
     def __init__(self, image, metadata):
+        
+        #Check if image and metadata is valid
         self.__validate(image, metadata)
-        self.__image=image
         self.__metadata=metadata
-    
-    
+        #Reshape image so it contains all dimensions
+        self.__image=self.__expand_singleton_dimensions(image, metadata)
+        
+        
     def __validate(self, image, metadata):
-        print(image.shape)
-        print(metadata)
+
         
         #Check if image is numpy array and metadata is dict
         if not isinstance(metadata, dict):
@@ -105,7 +108,7 @@ class PythImage(object):
      
         for i in range(len(key)):
             
-            length=ImageClass.__slice_length__(key[i], shape[i])
+            length=PythImage.__slice_length__(key[i], shape[i])
             dim_current=order[i]
             
             if dim_current=='C':
@@ -124,9 +127,7 @@ class PythImage(object):
     def get_metadata(self, key):
         return self.__metadata[key]
     
-    def convert_type(self, key):
-        #Needs to be implemented
-        return 1
+
     
     def set_metadata(self, key, value):
 
@@ -152,24 +153,130 @@ class PythImage(object):
         else:
             raise KeyError('Key is not meant for direct access!')
 
-    def expand_singleton_dimensions(self):
+    def __expand_singleton_dimensions(self, image, metadata):
 
-            dim_order_list=self.metadata['DimensionOrder']
+            dim_order_list=metadata['DimensionOrder']
           
             shape=[1]*len(dim_order_list)
             for i, dim in enumerate(dim_order_list):
                 if dim in self.__dim_translate.keys() and dim!='S':
                     key=self.__dim_translate[dim]
                  
-                    if key in self.metadata.keys():
-                        shape[i]=int(self.metadata[key])
+                    if key in metadata.keys():
+                        shape[i]=int(metadata[key])
                     else:
                         shape[i]=1
             shape.reverse()
            
-            self.image=np.reshape(self.__image, tuple(shape))
+            return np.reshape(image, tuple(shape))
      
-    #def append_dimension(dimension='T', image)
+    def roi_to_image(self):
+        from skimage.draw import polygon, polygon_perimeter, ellipse, line
+
+
+        
+        def draw_polygon(properties, image):
+            
+          points=properties['Points']  
+            
+          img = np.zeros((image.metadata['SizeX'], image.metadata['SizeY']), dtype=image.metadata['Type'])
+          
+          x_coords, y_coords=zip(*map( lambda x : x.split(',') , points.split()))
+     
+            
+          rr, cc = polygon(np.array(x_coords, dtype=np.uint8), np.array(y_coords,dtype=np.uint8))
+          rr_peri, cc_peri = polygon_perimeter(np.array(x_coords, dtype=np.uint8), np.array(y_coords,dtype=np.uint8))
+          
+          rr, cc=np.concatenate((rr,rr_peri)), np.concatenate((cc,cc_peri))
+          
+          img[rr, cc] = 1
+          
+          return img
+      
+        def draw_rectangle(rectangle_params, image):
+            
+              img = np.zeros((self.metadata['SizeX'], self.metadata['SizeY']), dtype=self.metadata['Type'])
+              
+              w=rectangle_params['Width']
+              h=rectangle_params['Height']
+              
+              x0=rectangle_params['X']
+              y0=rectangle_params['Y']
+              
+              x_coords=[x0,x0+w,x0+w,x0]
+              y_coords=[y0,y0,y0+h,y0+h]
+                
+              rr, cc = polygon(np.array(x_coords, dtype=np.uint8), np.array(y_coords,dtype=np.uint8))
+              rr_peri, cc_peri = polygon_perimeter(np.array(x_coords, dtype=np.uint8), np.array(y_coords,dtype=np.uint8))
+       
+             
+              rr, cc=np.concatenate((rr,rr_peri)), np.concatenate((cc,cc_peri))
+
+              img[rr, cc] = 1
+            
+              return img
+          
+        def draw_ellipse(ellipse_params, image):
+              img = np.zeros((self.metadata['SizeX'], self.metadata['SizeY']), dtype=self.metadata['Type'])
+              
+              rx=ellipse_params['RadiusX']+1
+              ry=ellipse_params['RadiusY']+1
+              
+              x0=ellipse_params['X']
+              y0=ellipse_params['Y']
+              
+              rr, cc = ellipse(x0, y0, rx,ry)
+
+              img[rr, cc] = 1
+            
+              return img
+          
+        def draw_line(line_params, image):
+              img = np.zeros((self.metadata['SizeX'], self.metadata['SizeY']), dtype=self.metadata['Type'])
+              
+              x1=int(line_params['X1'])
+              y1=int(line_params['Y1'])
+              
+              x2=int(line_params['X2'])
+              y2=int(line_params['Y2'])
+              
+              rr, cc = line(x1, y1, x2,y2)
+
+              img[rr, cc] = 1
+            
+              return img
+          
+        #shape_list={'Polygon': draw_polygon(points, self.image), 'Rectangle': }  
+        #shape_dict={'Polygon', 'Rectangle', 'Line', 'Polyline', 'Point', 'Ellipse' }
+        shape_dict={'Polygon':draw_polygon, 'Rectangle':draw_rectangle, 'Ellipse':draw_ellipse , 'Line':draw_line}
+        
+        if 'ROI' in self.metadata.keys():
+        
+       
+            
+            #def draw_polygon(points)
+
+
+                
+            #Generate roi list. If image has multiple ROI-s, metadata['ROI'] is a list.
+            if isinstance(self.metadata['ROI'], dict):
+                roi_list=[self.metadata['ROI']]
+            elif isinstance(self.metadata['ROI'], list):
+                roi_list=self.metadata['ROI']
+           
+            for i in range(len(roi_list)):
+           
+               print( RoiClass(roi_list[i]).coordinates)
+
+             
+      
+                
+                    
+                    
+
+               
+                
+                
      
 
     
@@ -235,7 +342,7 @@ class PythImage(object):
             #for index, (i, j, k) in enumerate(product(range(metadata['SizeC']), range(metadata['SizeT']), range(metadata['SizeZ']))):
             for i, j, k in product(range(self.__image.shape[0]),range(self.__image.shape[1]),range(self.__image.shape[2])):
 
-                 tif.save(self.__image([i][j][k]), description=ImageClass.metadata_to_ome(self.__metadata, file_name ))
+                 tif.save(self.__image([i][j][k]), description=PythImage.metadata_to_ome(self.__metadata, file_name ))
     
     def save_image2(image, path, file_name):
         '''
@@ -258,19 +365,17 @@ class PythImage(object):
 
             
             #Load image and create simplified metadata dictionary
-            image, ome_metadata=ImageClass.load_ome(path)
-            metadata=ImageClass.convert_ome_metadata(ome_metadata)
+            image, ome_metadata=PythImage.load_ome(path)
+            metadata=PythImage.convert_ome_metadata(ome_metadata)
 
                    
         elif tiffType=='imagej':
             
             #Load image and create simplified metadata dictionary
-            image, imagej_metadata=ImageClass.load_imagej(path)
+            image, imagej_metadata=PythImage.load_imagej(path)
             
-            metadata=ImageClass.convert_imagej_metadata(imagej_metadata)
+            metadata=PythImage.convert_imagej_metadata(imagej_metadata)
             
-            print(imagej_metadata)
-            print(metadata)
             '''        
             dim_order_final='XYZCT'
             #Change dimension order to the one specified in dim_order_final
@@ -289,8 +394,8 @@ class PythImage(object):
         
         elif tiffType=='tiff':
              #Load image and create simplified metadata dictionary
-            image, metadata=ImageClass.load_tiff(path)
-            metadata=ImageClass.convert_tiff_metadata(metadata, order=kwargs['order'], shape=kwargs['shape'])
+            image, metadata=PythImage.load_tiff(path)
+            metadata=PythImage.convert_tiff_metadata(metadata, order=kwargs['order'], shape=kwargs['shape'])
         
         #Return first timeframe
         return cls(image=image, metadata=metadata)
@@ -345,8 +450,7 @@ class PythImage(object):
         key_lookup={'T':'SizeT', 'C':'SizeC', 'Z':'SizeZ', 'X':'SizeX', 'Y':'SizeY', 'S':'SamplesPerPixel'}
         for dim in order:
             if dim=='S':
-                print(metadata_dict_out['SamplesPerPixel'])
-                print(shape[-1*(1+order.index(dim))])
+
                 if metadata_dict_out['SamplesPerPixel']!=shape[-1*(1+order.index(dim))]:
                   raise ImageClassError('Invalid shape for dataset','')
                 
@@ -363,8 +467,7 @@ class PythImage(object):
                 
         #Add physicalSize and units in X, Y and T to dictionary
         if 'x_resolution' in metadata_dict.keys():
-           metadata_dict_out['PhysicalSizeX']=metadata_dict['x_resolution'][1]/metadata_dict['x_resolution'][0]
-           
+           metadata_dict_out['PhysicalSizeX']=metadata_dict['x_resolution'][1]/metadata_dict['x_resolution'][0]     
            
         if 'y_resolution' in metadata_dict.keys():
            metadata_dict_out['PhysicalSizeY']=metadata_dict['y_resolution'][1]/metadata_dict['y_resolution'][0]
@@ -392,11 +495,9 @@ class PythImage(object):
         with normalized shape where axes of unit length are also marked. Note that order of axis will be 
         from the slowest to the fastest changing as returned by TiffFile.
         '''
-          
-        
+                
         with TiffFile(path) as tif:
             
-         
             if not tif.is_imagej:
                 raise TypeError('The file is corrupt or not an ImageJ tiff file!')
             
@@ -467,7 +568,7 @@ class PythImage(object):
             images = tif.asarray()
             
             #Load metadata
-            ome_metadata=ImageClass.xml2dict(tif[0].tags['image_description'].value, sanitize=True, prefix=None)
+            ome_metadata=PythImage.xml2dict(tif[0].tags['image_description'].value, sanitize=True, prefix=None)
             #pixel_metadata=ome_metadata['OME']['Image']['Pixels']
             
        
@@ -534,10 +635,7 @@ class PythImage(object):
         Create a simplified metadata dictionary from dictionaries extracted from the OME-Tiff xml files.
         '''
         
-        metadata_dict_out={}
-
-
-        
+        metadata_dict_out={}        
     
         #print(b.keys())
         #Only keep metadata that ar used from the input dictionary 
@@ -553,7 +651,7 @@ class PythImage(object):
         metadata_dict_out['SamplesPerPixel']=[dic['SamplesPerPixel'] if 'SamplesPerPixel' in dic.keys() else 1 for dic in pixels_dict['Channel']]
         metadata_dict_out['Name']=[dic['Name'] if 'Name' in dic.keys() else 'Ch'+str(index) for index, dic in enumerate(pixels_dict['Channel'])]
         
-        #Get ROI/s if present
+        #Get ROI-s if present
         if 'ROI' in metadata_dict['OME'].keys():
            metadata_dict_out['ROI']=metadata_dict['OME']['ROI']
                 
@@ -615,6 +713,11 @@ class PythImage(object):
             metadata_dict_out['TimeIncrementUnit']='s'
               
         return metadata_dict_out
+    
+    def z_projection (self):
+        '''Needs to be implemented
+        '''
+        pass
       
     def reorder(self, order):
         '''
@@ -767,6 +870,148 @@ class PythImage(object):
            
         return etree.tostring(ome_xml, encoding="utf-8")
 
+class RoiClass(object):
+    
+    from skimage.draw import polygon, polygon_perimeter, ellipse, line
+    
+    def __init__(self, roi_dict):
+                #def draw_polygon(points)
+        
+        print(roi_dict)
+
+        shape_dict={'Polygon':RoiClass.draw_polygon, 'Rectangle':RoiClass.draw_rectangle, 'Ellipse':RoiClass.draw_ellipse , 
+                    'Line':RoiClass.draw_line, 'Point': RoiClass.draw_point, 'Polyline':RoiClass.draw_polyline}
+
+       
+        
+        
+        #Generate shape list for ROI. ROI is the union of elements in the shape lsit
+        if isinstance(roi_dict['Union']['Shape'], dict):
+            shape_list=[roi_dict['Union']['Shape']]
+        elif isinstance(roi_dict['Union']['Shape'], list):
+            shape_list=roi_dict['Union']['Shape']
+        
+        
+        x=[];y=[];
+        for shape in shape_list:
+
+            for key in shape.keys():
+                #print(union_list[j]['Shape'])
+         
+                #element contains only one shape by definition
+                if key in shape_dict.keys():
+                    
+                    x_list, y_list=shape_dict[key](shape[key])
+         
+                    
+                    RoiClass.append_lists(x,x_list)
+                    RoiClass.append_lists(y,y_list)
+
+            
+            self.coordinates=x, y
+    
+    @staticmethod 
+    def draw_polygon(properties):
+        
+      points=properties['Points']  
+      
+      x_coords, y_coords=zip(*map( lambda x : x.split(',') , points.split()))
+ 
+        
+      rr, cc = polygon(np.array(x_coords, dtype=np.uint8), np.array(y_coords,dtype=np.uint8))
+      rr_peri, cc_peri = polygon_perimeter(np.array(x_coords, dtype=np.uint8), np.array(y_coords,dtype=np.uint8))
+      
+      rr, cc=np.concatenate((rr,rr_peri)), np.concatenate((cc,cc_peri))
+      
+      return rr, cc
+    
+    @staticmethod 
+    def draw_rectangle(rectangle_params):
+          
+          w=rectangle_params['Width']
+          h=rectangle_params['Height']
+          
+          x0=rectangle_params['X']
+          y0=rectangle_params['Y']
+          
+          x_coords=[x0,x0+w,x0+w,x0]
+          y_coords=[y0,y0,y0+h,y0+h]
+            
+          rr, cc = polygon(np.array(x_coords, dtype=np.uint8), np.array(y_coords,dtype=np.uint8))
+          rr_peri, cc_peri = polygon_perimeter(np.array(x_coords, dtype=np.uint8), np.array(y_coords,dtype=np.uint8))
+   
+          rr, cc=np.concatenate((rr,rr_peri)), np.concatenate((cc,cc_peri))
+
+          return rr, cc
+    
+    @staticmethod 
+    def draw_point(parameters):
+          
+          x=[parameters['X']]
+          y=[parameters['Y']]
+          
+          return x, y
+      
+    @staticmethod 
+    def draw_ellipse(ellipse_params):
+         
+          
+          rx=ellipse_params['RadiusX']+1
+          ry=ellipse_params['RadiusY']+1
+          
+          x0=ellipse_params['X']
+          y0=ellipse_params['Y']
+          
+          rr, cc = ellipse(x0, y0, rx,ry)
+
+        
+          return rr, cc
+    
+    @staticmethod  
+    def draw_line(line_params):
+         
+          x1=int(line_params['X1'])
+          y1=int(line_params['Y1'])
+          
+          x2=int(line_params['X2'])
+          y2=int(line_params['Y2'])
+          
+          rr, cc = line(x1, y1, x2,y2)
+
+          return rr, cc
+
+    @staticmethod 
+    def draw_polyline(properties):
+          
+        points=properties['Points']  
+      
+        coords=np.array(list(map( lambda x : x.split(',') , points.split())), dtype=np.uint8)
+  
+        rr=[];cc=[];
+        for i in range(len(coords)-1):
+            print(str(i))
+            
+            rr_line, cc_line = line(coords[i][0], coords[i][1], coords[i+1][0], coords[i+1][1],)
+            
+            RoiClass.append_lists(rr,rr_line)
+            RoiClass.append_lists(cc,cc_line) 
+
+    
+        return rr, cc
+             
+   
+                
+    @staticmethod
+    def append_lists(a,b):
+        '''
+        Append elements of two lists using slice notation. Elements of list b are added to the end of a.
+        '''                  
+        a[len(a):len(a)]=b
+         
+                
+                
+     
+
 
 #Class for error handling
 class ImageClassError(Exception):
@@ -784,15 +1029,16 @@ if __name__ == '__main__':
     
 
 
-    path="D:\\Playground\\testerROI.ome.tif"#"F:\Workspace\images\\test.tif"#simplergb.ome.tif"
+    path="D:\\Playground\\testerROI3.ome.tif"#"F:\Workspace\images\\test.tif"#simplergb.ome.tif"
     a = PythImage.load_image(path, tiffType='ome')
  
     #file_name="tester.ome.tif"
     #a.set_metadata('Name', ['4','4'])
-    print(a)
+    
     path2="D:\\Playground\\testerSAVEED.ome.tif"
     
-    a.expand_singleton_dimensions()
+    
+    a.roi_to_image()
 
     #a.save_image(path=path2)
    
