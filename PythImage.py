@@ -16,6 +16,8 @@ from skimage.draw import polygon, polygon_perimeter, ellipse, line
 
 ##Add channel, remove channel, extract channel etc.
 class PythImage(object):
+    '''
+    '''
     
     __protected=['SizeT', 'SizeC','SizeZ', 'SizeX','SizeY', 'SamplesPerPixel', 'Type', 'DimensionOrder']
     __dim_translate={'T':'SizeT', 'C':'SizeC', 'Z':'SizeZ', 'X':'SizeX', 'Y': 'SizeY', 'S':'SamplesPerPixel'}
@@ -41,6 +43,14 @@ class PythImage(object):
         #Check if metadata 'Type' field matches the type of the image
         if not metadata['Type']==image.dtype:
              raise TypeError('image data type does not mach the one specified in the metadata!')
+             
+        #Check if number of channels and length of the name list is the same
+        if 'SizeC' in metadata.keys() :
+            if utils.length(metadata['Name'])!=metadata['SizeC']:
+                raise PythImageError('Missing Name of one or more channels!','')
+            if utils.length(metadata['SamplesPerPixel'])!=metadata['SizeC']:
+                raise PythImageError('Missing SamplesPerPixel of one or more channels!','')
+     
             
         #Check if image shape confers with the one in the metadata
         #Remove singleton dimensions
@@ -94,8 +104,10 @@ class PythImage(object):
                 
         return self.__init__(image=self.__image[indexes],metadata=self.__metadata )
     
+    
     def __getattr__(self, atr):
         raise AttributeError("Attribute: '"+str(atr)+"' is not available!")
+    
     def __getitem__(self, key):
 
         shape=self.__image.shape
@@ -123,13 +135,10 @@ class PythImage(object):
     def __repr__(self):
         return self.__dict_to_string__(self.__metadata)    
     
-    
-    
     def get_metadata(self, key):
         return self.__metadata[key]
     
-
-    
+  
     def set_metadata(self, key, value):
 
         if key not in self.__protected:
@@ -154,6 +163,7 @@ class PythImage(object):
         else:
             raise KeyError('Key is not meant for direct access!')
 
+    
     def __expand_singleton_dimensions(self, image, metadata):
 
             dim_order_list=metadata['DimensionOrder']
@@ -172,6 +182,10 @@ class PythImage(object):
             return np.reshape(image, tuple(shape))
     
     def append_to_dimension(self, image, dim):
+      
+        #Append names
+        self.metadata['Name']=utils.concatenate(self.metadata['Name'],image.metadata['Name'])
+        self.metadata['SamplePerPixel']=utils.concatenate(self.metadata['SamplesPerPixel'], image.metadata['SamplesPerPixel'])
         
         #Get original dimension order
         original_order=self.metadata['DimensionOrder']
@@ -188,44 +202,52 @@ class PythImage(object):
        
        
         
-        
-        
-    def roi_to_channel(self):
+    def roi_to_channel(self, index):
       
-        original_order=self.metadata['DimensionOrder']
-        #Reorder to ensure XY are the first dimensions
-        self.reorder( 'XYZCT')
-        #Create a single channel array
-        shape=(self.metadata['SizeT'], 1, self.metadata['SizeZ'], self.metadata['SizeY'], self.metadata['SizeX'])
+
         
    
         if 'ROI' in self.metadata.keys():
             
-            #create metadata dictionary for roi and set channel to 1
-            roi_metadata=self.metadata.copy()
-            roi_metadata['SizeC']=1
-           
-            img=np.zeros(shape, dtype=self.metadata['Type'])
-
             #Generate roi list. If image has multiple ROI-s, metadata['ROI'] is a list.
             if isinstance(self.metadata['ROI'], dict):
                 roi_list=[self.metadata['ROI']]
             elif isinstance(self.metadata['ROI'], list):
                 roi_list=self.metadata['ROI']
            
-            for i in range(len(roi_list)):
-           
-                rr, cc = RoiClass(roi_list[i]).coordinates
+            original_order=self.metadata['DimensionOrder']
+            #Reorder to ensure XY are the first dimensions
+            self.reorder( 'XYZCT')
+            #Create a single channel array
+            shape=(self.metadata['SizeT'], 1, self.metadata['SizeZ'], self.metadata['SizeY'], self.metadata['SizeX'])
+
+            #create metadata dictionary for roi and set channel to 1
+            
+            roi_metadata=self.metadata.copy()
+            roi_metadata['SizeC']=1
+            roi_metadata['Name']=roi_list[index]['ID']
+            roi_metadata['SamplesPerPixel']=1
+            del roi_metadata['ROI']
+            print(roi_metadata)
+         
+            
+            img=np.zeros(shape, dtype=self.metadata['Type'])
+            
+            rr, cc = RoiClass(roi_list[index]).coordinates
+            
  
-                img[:,:,:,cc, rr] = 1
+            img[:,:,:,cc, rr] = 1
                 
             #Create new PythImage object
             roi=PythImage(img, roi_metadata )
             
             self.append_to_dimension(roi, dim='C')
 
-        #reorder to original dimension order
-        self.reorder(original_order)
+            #reorder to original dimension order
+            self.reorder(original_order)
+            
+        else:
+            raise IndexError('No ROI available')
                 
                     
                     
@@ -280,19 +302,17 @@ class PythImage(object):
         '''
         Save Image. Metadata not saved currently!!
         '''
-        print('sad')
+   
         if 'S' in self.metadata['DimensionOrder']:
             order_final='SXYCZT'
         else:
            order_final='XYCZT'
-        print(order_final)
+
         
         self.reorder(order_final)
         
         file_name=os.path.basename(path)
-        print(self.image.shape)
-        
-        print(self.metadata['DimensionOrder'])#,range(self.__image.shape[1]),range(self.__image.shape[2])
+
         
         with TiffWriter(path) as tif:
             #for index, (i, j, k) in enumerate(product(range(metadata['SizeC']), range(metadata['SizeT']), range(metadata['SizeZ']))):
@@ -834,8 +854,7 @@ class RoiClass(object):
     dimension eg if TheZ is specified the roi is in only the given slice otherwise in all of the slices. This gives the 
     possibility to specify 3D ROI-s. Currently this is not implemented!
     '''
-    
-    
+
     from skimage.draw import polygon, polygon_perimeter, ellipse, line
     
     def __init__(self, roi_dict):
@@ -851,7 +870,6 @@ class RoiClass(object):
         elif isinstance(roi_dict['Union']['Shape'], list):
             shape_list=roi_dict['Union']['Shape']
         
-        
         x=[];y=[];
         for shape in shape_list:
 
@@ -863,9 +881,8 @@ class RoiClass(object):
                     
                     x_list, y_list=shape_dict[key](shape[key])
          
-                    
-                    RoiClass.append_lists(x,x_list)
-                    RoiClass.append_lists(y,y_list)
+                    utils.concatenate(x,x_list)
+                    utils.concatenate(y,y_list)
 
         self.coordinates=x, y
         
@@ -954,25 +971,47 @@ class RoiClass(object):
   
         rr=[];cc=[];
         for i in range(len(coords)-1):
-            print(str(i))
+           
             
             rr_line, cc_line = line(coords[i][0], coords[i][1], coords[i+1][0], coords[i+1][1],)
             
-            RoiClass.append_lists(rr,rr_line)
-            RoiClass.append_lists(cc,cc_line) 
+            RoiClass.concatenate(rr,rr_line)
+            RoiClass.concatenate(cc,cc_line) 
 
     
         return rr, cc
              
    
                 
+
+         
+class utils():
     @staticmethod
-    def append_lists(a,b):
+    def concatenate(a,b):
         '''
         Append elements of two lists using slice notation. Elements of list b are added to the end of a.
-        '''                  
+        '''
+        if not isinstance(a, collections.Iterable) or isinstance(a, (str,dict)):
+            a=[a]
+        if not isinstance(b, collections.Iterable) or isinstance(b, (str,dict)):
+            b=[b]
         a[len(a):len(a)]=b
-         
+
+        return a                  
+    
+
+        
+    @staticmethod
+    def length(a):
+        '''
+        Append elements of two lists using slice notation. Elements of list b are added to the end of a.
+        '''
+        if not isinstance(a, collections.Iterable) or isinstance(a, str):
+            length=1
+        else:
+            length=len(a)
+        
+        return length
                 
                 
      
@@ -1001,8 +1040,9 @@ if __name__ == '__main__':
     path2="D:\\Playground\\testerSAVEED.ome.tif"
     
     
-    a.roi_to_channel()
-    print(a.image.shape)
+    a.roi_to_channel(index=0)
+    print(a)
+ 
 
     #a.save_image(path=path2)
    
