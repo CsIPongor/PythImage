@@ -32,7 +32,6 @@ class PythImage(object):
         
     def __validate(self, image, metadata):
 
-        
         #Check if image is numpy array and metadata is dict
         if not isinstance(metadata, dict):
             raise TypeError('metadata must be a dictionary!')
@@ -48,7 +47,7 @@ class PythImage(object):
         shape_image=[val for val in image.shape if val!=1]
         shape_metadata=[metadata[self.__dim_translate[dim]] for dim in reversed(metadata['DimensionOrder']) if metadata[self.__dim_translate[dim]]!=1]
         if shape_image!=shape_metadata:
-            raise ImageClassError('shape information in metadata is not compattible to the image shape!','')
+            raise PythImageError('shape information in metadata is not compattible to the image shape!','')
             
     @property
     def image(self):
@@ -95,6 +94,8 @@ class PythImage(object):
                 
         return self.__init__(image=self.__image[indexes],metadata=self.__metadata )
     
+    def __getattr__(self, atr):
+        raise AttributeError("Attribute: '"+str(atr)+"' is not available!")
     def __getitem__(self, key):
 
         shape=self.__image.shape
@@ -169,95 +170,43 @@ class PythImage(object):
             shape.reverse()
            
             return np.reshape(image, tuple(shape))
-     
-    def roi_to_image(self):
-        from skimage.draw import polygon, polygon_perimeter, ellipse, line
-
-
+    
+    def append_to_dimension(self, image, dim):
         
-        def draw_polygon(properties, image):
-            
-          points=properties['Points']  
-            
-          img = np.zeros((image.metadata['SizeX'], image.metadata['SizeY']), dtype=image.metadata['Type'])
-          
-          x_coords, y_coords=zip(*map( lambda x : x.split(',') , points.split()))
-     
-            
-          rr, cc = polygon(np.array(x_coords, dtype=np.uint8), np.array(y_coords,dtype=np.uint8))
-          rr_peri, cc_peri = polygon_perimeter(np.array(x_coords, dtype=np.uint8), np.array(y_coords,dtype=np.uint8))
-          
-          rr, cc=np.concatenate((rr,rr_peri)), np.concatenate((cc,cc_peri))
-          
-          img[rr, cc] = 1
-          
-          return img
+        #Get original dimension order
+        original_order=self.metadata['DimensionOrder']
+    
+        #reshape image so the two confer
+        image.reorder(original_order)
+        
+        #Get the index of the given dimension in the shape of the image
+        ind=len(original_order)-original_order.index('C')-1
+        
+        self.metadata[self.__dim_translate[dim]]=self.metadata[self.__dim_translate[dim]]+image.metadata[self.__dim_translate[dim]]
+
+        self.image=np.concatenate((self.image,image.image), axis=ind)
+       
+       
+        
+        
+        
+    def roi_to_channel(self):
       
-        def draw_rectangle(rectangle_params, image):
-            
-              img = np.zeros((self.metadata['SizeX'], self.metadata['SizeY']), dtype=self.metadata['Type'])
-              
-              w=rectangle_params['Width']
-              h=rectangle_params['Height']
-              
-              x0=rectangle_params['X']
-              y0=rectangle_params['Y']
-              
-              x_coords=[x0,x0+w,x0+w,x0]
-              y_coords=[y0,y0,y0+h,y0+h]
-                
-              rr, cc = polygon(np.array(x_coords, dtype=np.uint8), np.array(y_coords,dtype=np.uint8))
-              rr_peri, cc_peri = polygon_perimeter(np.array(x_coords, dtype=np.uint8), np.array(y_coords,dtype=np.uint8))
-       
-             
-              rr, cc=np.concatenate((rr,rr_peri)), np.concatenate((cc,cc_peri))
-
-              img[rr, cc] = 1
-            
-              return img
-          
-        def draw_ellipse(ellipse_params, image):
-              img = np.zeros((self.metadata['SizeX'], self.metadata['SizeY']), dtype=self.metadata['Type'])
-              
-              rx=ellipse_params['RadiusX']+1
-              ry=ellipse_params['RadiusY']+1
-              
-              x0=ellipse_params['X']
-              y0=ellipse_params['Y']
-              
-              rr, cc = ellipse(x0, y0, rx,ry)
-
-              img[rr, cc] = 1
-            
-              return img
-          
-        def draw_line(line_params, image):
-              img = np.zeros((self.metadata['SizeX'], self.metadata['SizeY']), dtype=self.metadata['Type'])
-              
-              x1=int(line_params['X1'])
-              y1=int(line_params['Y1'])
-              
-              x2=int(line_params['X2'])
-              y2=int(line_params['Y2'])
-              
-              rr, cc = line(x1, y1, x2,y2)
-
-              img[rr, cc] = 1
-            
-              return img
-          
-        #shape_list={'Polygon': draw_polygon(points, self.image), 'Rectangle': }  
-        #shape_dict={'Polygon', 'Rectangle', 'Line', 'Polyline', 'Point', 'Ellipse' }
-        shape_dict={'Polygon':draw_polygon, 'Rectangle':draw_rectangle, 'Ellipse':draw_ellipse , 'Line':draw_line}
+        original_order=self.metadata['DimensionOrder']
+        #Reorder to ensure XY are the first dimensions
+        self.reorder( 'XYZCT')
+        #Create a single channel array
+        shape=(self.metadata['SizeT'], 1, self.metadata['SizeZ'], self.metadata['SizeY'], self.metadata['SizeX'])
         
+   
         if 'ROI' in self.metadata.keys():
-        
-       
             
-            #def draw_polygon(points)
+            #create metadata dictionary for roi and set channel to 1
+            roi_metadata=self.metadata.copy()
+            roi_metadata['SizeC']=1
+           
+            img=np.zeros(shape, dtype=self.metadata['Type'])
 
-
-                
             #Generate roi list. If image has multiple ROI-s, metadata['ROI'] is a list.
             if isinstance(self.metadata['ROI'], dict):
                 roi_list=[self.metadata['ROI']]
@@ -266,10 +215,17 @@ class PythImage(object):
            
             for i in range(len(roi_list)):
            
-               print( RoiClass(roi_list[i]).coordinates)
+                rr, cc = RoiClass(roi_list[i]).coordinates
+ 
+                img[:,:,:,cc, rr] = 1
+                
+            #Create new PythImage object
+            roi=PythImage(img, roi_metadata )
+            
+            self.append_to_dimension(roi, dim='C')
 
-             
-      
+        #reorder to original dimension order
+        self.reorder(original_order)
                 
                     
                     
@@ -415,8 +371,7 @@ class PythImage(object):
 
             
             images = tif.asarray() 
-        print(metadata)
-        print(images.shape)
+
         return images, metadata
     
     @staticmethod
@@ -452,15 +407,15 @@ class PythImage(object):
             if dim=='S':
 
                 if metadata_dict_out['SamplesPerPixel']!=shape[-1*(1+order.index(dim))]:
-                  raise ImageClassError('Invalid shape for dataset','')
+                  raise PythImageError('Invalid shape for dataset','')
                 
             if dim=='X':                
                 if metadata_dict_out['SizeX']!=shape[-1*(1+order.index(dim))]:
-                  raise ImageClassError('Invalid shape for dataset','') 
+                  raise PythImageError('Invalid shape for dataset','') 
         
             if dim=='Y':                
                 if metadata_dict_out['SizeY']!=shape[-1*(1+order.index(dim))]:
-                  raise ImageClassError('Invalid shape for dataset','')  
+                  raise PythImageError('Invalid shape for dataset','')  
             
             metadata_dict_out[key_lookup[dim]]=shape[-1*(1+order.index(dim))]
                 
@@ -749,7 +704,7 @@ class PythImage(object):
                 dim_order_list[axis_index_current], dim_order_list[axis_index_final] = dim_order_list[axis_index_final], dim_order_list[axis_index_current]
        
         #Set final dimension order
-        self.__metadata['DimensionOrder']=order_final
+        self.__metadata['DimensionOrder']=''.join(order_final)
         
 
     def xml2dict( xml, sanitize=True, prefix=None):
@@ -872,19 +827,24 @@ class PythImage(object):
 
 class RoiClass(object):
     
+    '''The ome ROI hierarchi in short is as follows. Each image can have multiple ROI objects with a union object for each.
+    Each union is made up of at least one shape. The shapes have a type that can be Rectangle, Mask, Point, Ellipse, Line, 
+    Polyline, Polygon, Label. Among the shapes rectangle, line, point, polygon, poltline and ellipse are supported. Each shape
+    has optional attributes TheT, TheC, TheC. If any of these attributes is not present the roi is in all elements of that 
+    dimension eg if TheZ is specified the roi is in only the given slice otherwise in all of the slices. This gives the 
+    possibility to specify 3D ROI-s. Currently this is not implemented!
+    '''
+    
+    
     from skimage.draw import polygon, polygon_perimeter, ellipse, line
     
     def __init__(self, roi_dict):
                 #def draw_polygon(points)
         
-        print(roi_dict)
 
         shape_dict={'Polygon':RoiClass.draw_polygon, 'Rectangle':RoiClass.draw_rectangle, 'Ellipse':RoiClass.draw_ellipse , 
                     'Line':RoiClass.draw_line, 'Point': RoiClass.draw_point, 'Polyline':RoiClass.draw_polyline}
 
-       
-        
-        
         #Generate shape list for ROI. ROI is the union of elements in the shape lsit
         if isinstance(roi_dict['Union']['Shape'], dict):
             shape_list=[roi_dict['Union']['Shape']]
@@ -907,8 +867,13 @@ class RoiClass(object):
                     RoiClass.append_lists(x,x_list)
                     RoiClass.append_lists(y,y_list)
 
-            
-            self.coordinates=x, y
+        self.coordinates=x, y
+        
+    def __repr__(self):
+        
+        return str(self.__dict__)
+    
+    
     
     @staticmethod 
     def draw_polygon(properties):
@@ -1014,11 +979,11 @@ class RoiClass(object):
 
 
 #Class for error handling
-class ImageClassError(Exception):
+class PythImageError(Exception):
     
     def __init__(self, message, errors):
         
-        super(ImageClassError, self).__init__(message)
+        super(PythImageError, self).__init__(message)
         self.message = message
         self.errors = errors
     
@@ -1027,8 +992,6 @@ class ImageClassError(Exception):
 
 if __name__ == '__main__':
     
-
-
     path="D:\\Playground\\testerROI3.ome.tif"#"F:\Workspace\images\\test.tif"#simplergb.ome.tif"
     a = PythImage.load_image(path, tiffType='ome')
  
@@ -1038,7 +1001,8 @@ if __name__ == '__main__':
     path2="D:\\Playground\\testerSAVEED.ome.tif"
     
     
-    a.roi_to_image()
+    a.roi_to_channel()
+    print(a.image.shape)
 
     #a.save_image(path=path2)
    
