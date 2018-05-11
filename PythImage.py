@@ -12,6 +12,7 @@ from skimage.external.tifffile import TiffFile, TiffWriter
 import collections
 from itertools import product, chain
 from skimage.draw import polygon, polygon_perimeter, ellipse, line
+from xml.etree import cElementTree as etree 
  
 
 ##Add channel, remove channel, extract channel etc.
@@ -31,57 +32,6 @@ class PythImage(object):
         #Reshape image so it contains all dimensions
         self.__image=self.__expand_singleton_dimensions(image, metadata)
         
-        
-    def __validate(self, image, metadata):
-
-        #Check if image is numpy array and metadata is dict
-        if not isinstance(metadata, dict):
-            raise TypeError('metadata must be a dictionary!')
-        if not isinstance(image, np.ndarray):
-            raise TypeError('image must be a a NumPy array!')
-        
-        #Check if metadata 'Type' field matches the type of the image
-        if not metadata['Type']==image.dtype:
-             raise TypeError('image data type does not mach the one specified in the metadata!')
-             
-        #Check if number of channels and length of the name list is the same
-        if 'SizeC' in metadata.keys() :
-            if utils.length(metadata['Name'])!=metadata['SizeC']:
-                raise PythImageError('Missing Name of one or more channels!','')
-            if utils.length(metadata['SamplesPerPixel'])!=metadata['SizeC']:
-                raise PythImageError('Missing SamplesPerPixel of one or more channels!','')
-     
-            
-        #Check if image shape confers with the one in the metadata
-        #Remove singleton dimensions
-        shape_image=[val for val in image.shape if val!=1]
-        shape_metadata=[metadata[self.__dim_translate[dim]] for dim in reversed(metadata['DimensionOrder']) if metadata[self.__dim_translate[dim]]!=1]
-        if shape_image!=shape_metadata:
-            raise PythImageError('shape information in metadata is not compattible to the image shape!','')
-            
-    @property
-    def image(self):
-        return self.__image
-    
-    @image.setter
-    def image(self, value):
-        #Check if new image is compattible with metadata
-        self.__validate(value, self.__metadata)
-        #Set new image
-        self.__image=value
-          
-    @property
-    def metadata(self):
-        return self.__metadata
-    
-    @metadata.setter
-    def metadata(self, value):
-        #Check if new metadata is compattible with image
-        self.__validate(self.__image, value)
-        #Set metadata
-        self.__metadata=value
-     
-    
     def __call__(self, T=None, C=None, Z=None):
   
         local_dict=locals()    
@@ -104,9 +54,6 @@ class PythImage(object):
                 
         return self.__init__(image=self.__image[indexes],metadata=self.__metadata )
     
-    
-    def __getattr__(self, atr):
-        raise AttributeError("Attribute: '"+str(atr)+"' is not available!")
     
     def __getitem__(self, key):
 
@@ -133,7 +80,135 @@ class PythImage(object):
         return self.__init__(image=self.__image[key].copy() ,metadata=metadata )
     
     def __repr__(self):
-        return self.__dict_to_string__(self.__metadata)    
+        return utils.dict_to_string(self.__metadata)     
+    
+    def __getattr__(self, atr):
+        raise AttributeError("Attribute: '"+str(atr)+"' is not available!")    
+            
+    @property
+    def image(self):
+        return self.__image
+    
+    @image.setter
+    def image(self, value):
+        #Check if new image is compattible with metadata
+        self.__validate(value, self.__metadata)
+        #Set new image
+        self.__image=value
+          
+    @property
+    def metadata(self):
+        return self.__metadata
+    
+    @metadata.setter
+    def metadata(self, value):
+        #Check if new metadata is compattible with image
+        self.__validate(self.__image, value)
+        #Set metadata
+        self.__metadata=value
+     
+    @classmethod              
+    def load_image(cls, path, tiffType='imageJ', **kwargs):
+        '''
+        Load image stack from path. RGB images are not supported currently and only first frame is returned.
+        '''
+        
+        kwargs=dict(**kwargs)
+        
+        if tiffType=='ome':
+
+            
+            #Load image and create simplified metadata dictionary
+            image, ome_metadata=PythImage.load_ome(path)
+            metadata=PythImage.convert_ome_metadata(ome_metadata)
+
+                   
+        elif tiffType=='imagej':
+            
+            #Load image and create simplified metadata dictionary
+            image, imagej_metadata=PythImage.load_imagej(path)
+            
+            metadata=PythImage.convert_imagej_metadata(imagej_metadata)
+            
+            '''        
+            dim_order_final='XYZCT'
+            #Change dimension order to the one specified in dim_order_final
+            dim_order=metadata['DimensionOrder']
+            image=ImageClass.reorder(dim_order, 'SXYZCT')
+             
+            #Reshape image so output image has separate channels for S dimension
+            if metadata['SamplesPerPixel']>1:
+                image=ImageClass.merge_axes(image, 5, 1)
+            metadata['DimensionOrder']=dim_order_final
+            
+            #For hyperstacks remove S singleton dimension
+            if image.shape[-1]==1:
+                image=np.squeeze(image, axis=5)
+            '''    
+        
+        elif tiffType=='tiff':
+             #Load image and create simplified metadata dictionary
+            image, metadata=PythImage.load_tiff(path)
+            metadata=PythImage.convert_tiff_metadata(metadata, order=kwargs['order'], shape=kwargs['shape'])
+        
+        #Return first timeframe
+        return cls(image=image, metadata=metadata)
+    
+   
+    
+    def __validate(self, image, metadata):
+
+        #Check if image is numpy array and metadata is dict
+        if not isinstance(metadata, dict):
+            raise TypeError('metadata must be a dictionary!')
+        if not isinstance(image, np.ndarray):
+            raise TypeError('image must be a a NumPy array!')
+        
+        #Check if metadata 'Type' field matches the type of the image
+        if not metadata['Type']==image.dtype:
+             raise TypeError('image data type does not mach the one specified in the metadata!')
+             
+        #Check if number of channels and length of the name list is the same
+        if 'SizeC' in metadata.keys() :
+            if utils.length(metadata['Name'])!=metadata['SizeC']:
+                raise PythImageError('Missing Name of one or more channels!','')
+            if utils.length(metadata['SamplesPerPixel'])!=metadata['SizeC']:
+                raise PythImageError('Missing SamplesPerPixel of one or more channels!','')
+     
+            
+        #Check if image shape confers with the one in the metadata
+        #Remove singleton dimensions
+        shape_image=[val for val in image.shape if val!=1]
+        shape_metadata=[metadata[self.__dim_translate[dim]] for dim in reversed(metadata['DimensionOrder']) if metadata[self.__dim_translate[dim]]!=1]
+        if shape_image!=shape_metadata:
+            raise PythImageError('shape information in metadata is not compattible to the image shape!','')
+    
+    
+    def __expand_singleton_dimensions(self, image, metadata):
+
+        dim_order_list=metadata['DimensionOrder']
+      
+        shape=[1]*len(dim_order_list)
+        for i, dim in enumerate(dim_order_list):
+            if dim in self.__dim_translate.keys() and dim!='S':
+                key=self.__dim_translate[dim]
+             
+                if key in metadata.keys():
+                    shape[i]=int(metadata[key])
+                else:
+                    shape[i]=1
+        shape.reverse()
+       
+        return np.reshape(image, tuple(shape))
+    
+    @staticmethod
+    def __slice_length(slice_object, object_length):
+        if isinstance(slice_object, int):
+            slice_length=1 
+        if isinstance(slice_object, slice):
+            slice_length=len(range(*slice_object.indices(object_length)))
+        
+        return  slice_length
     
     def get_metadata(self, key):
         return self.__metadata[key]
@@ -164,29 +239,13 @@ class PythImage(object):
             raise KeyError('Key is not meant for direct access!')
 
     
-    def __expand_singleton_dimensions(self, image, metadata):
-
-            dim_order_list=metadata['DimensionOrder']
-          
-            shape=[1]*len(dim_order_list)
-            for i, dim in enumerate(dim_order_list):
-                if dim in self.__dim_translate.keys() and dim!='S':
-                    key=self.__dim_translate[dim]
-                 
-                    if key in metadata.keys():
-                        shape[i]=int(metadata[key])
-                    else:
-                        shape[i]=1
-            shape.reverse()
-           
-            return np.reshape(image, tuple(shape))
     
     def append_to_dimension(self, image, dim):
       
         #Append names
         self.metadata['Name']=utils.concatenate(self.metadata['Name'],image.metadata['Name'])
-        self.metadata['SamplePerPixel']=utils.concatenate(self.metadata['SamplesPerPixel'], image.metadata['SamplesPerPixel'])
-        
+        self.metadata['SamplesPerPixel']=utils.concatenate(self.metadata['SamplesPerPixel'], image.metadata['SamplesPerPixel'])
+        print(self.metadata.keys())
         #Get original dimension order
         original_order=self.metadata['DimensionOrder']
     
@@ -205,8 +264,6 @@ class PythImage(object):
     def roi_to_channel(self, index):
       
 
-        
-   
         if 'ROI' in self.metadata.keys():
             
             #Generate roi list. If image has multiple ROI-s, metadata['ROI'] is a list.
@@ -228,14 +285,12 @@ class PythImage(object):
             roi_metadata['Name']=roi_list[index]['ID']
             roi_metadata['SamplesPerPixel']=1
             del roi_metadata['ROI']
-            print(roi_metadata)
-         
-            
+                    
             img=np.zeros(shape, dtype=self.metadata['Type'])
             
             rr, cc = RoiClass(roi_list[index]).coordinates
             
- 
+           
             img[:,:,:,cc, rr] = 1
                 
             #Create new PythImage object
@@ -249,35 +304,6 @@ class PythImage(object):
         else:
             raise IndexError('No ROI available')
                 
-                    
-                    
-
-               
-                
-                
-     
-
-    
-    @staticmethod
-    def __slice_length__(slice_object, object_length):
-        if isinstance(slice_object, int):
-            slice_length=1 
-        if isinstance(slice_object, slice):
-            slice_length=len(range(*slice_object.indices(object_length)))
-        
-        return  slice_length
-    
-
-        
-    def __dict_to_string__(self, d, lvl=0):
-        string='Shape:%s\n' % str(self.__image.shape)
-        for k, v in d.items():
-            string+='%s%s' % (lvl * '\t', str(k))
-            if type(v) == dict:
-                self.__dict_to_string__(v, lvl+1)
-            else:
-               string+=':%s'% v+'\n'
-        return string
     
     '''
     def __update_metadata__(self):
@@ -329,52 +355,7 @@ class PythImage(object):
             for i, j, k in product(range(image.shape[0]),range(image.shape[1]),range(image.shape[2])):
                  tif.save(image[i][j][k])
     
-    @classmethod              
-    def load_image(cls, path, tiffType='imageJ', **kwargs):
-        '''
-        Load image stack from path. RGB images are not supported currently and only first frame is returned.
-        '''
-        
-        kwargs=dict(**kwargs)
-        
-        if tiffType=='ome':
 
-            
-            #Load image and create simplified metadata dictionary
-            image, ome_metadata=PythImage.load_ome(path)
-            metadata=PythImage.convert_ome_metadata(ome_metadata)
-
-                   
-        elif tiffType=='imagej':
-            
-            #Load image and create simplified metadata dictionary
-            image, imagej_metadata=PythImage.load_imagej(path)
-            
-            metadata=PythImage.convert_imagej_metadata(imagej_metadata)
-            
-            '''        
-            dim_order_final='XYZCT'
-            #Change dimension order to the one specified in dim_order_final
-            dim_order=metadata['DimensionOrder']
-            image=ImageClass.reorder(dim_order, 'SXYZCT')
-             
-            #Reshape image so output image has separate channels for S dimension
-            if metadata['SamplesPerPixel']>1:
-                image=ImageClass.merge_axes(image, 5, 1)
-            metadata['DimensionOrder']=dim_order_final
-            
-            #For hyperstacks remove S singleton dimension
-            if image.shape[-1]==1:
-                image=np.squeeze(image, axis=5)
-            '''    
-        
-        elif tiffType=='tiff':
-             #Load image and create simplified metadata dictionary
-            image, metadata=PythImage.load_tiff(path)
-            metadata=PythImage.convert_tiff_metadata(metadata, order=kwargs['order'], shape=kwargs['shape'])
-        
-        #Return first timeframe
-        return cls(image=image, metadata=metadata)
     
     @staticmethod
     def load_tiff(path, frames_per_sec=1, z_increment=1 ):
@@ -487,8 +468,8 @@ class PythImage(object):
                     #Convert bytes type to string, split
                     lines=str(tag.value, 'utf-8').split()
                     
-                    for line in lines:
-                        lines_split=line.split('=')
+                    for ln in lines:
+                        lines_split=ln.split('=')
                         
                         metadata[lines_split[0]]=lines_split[1]
                 else:
@@ -543,7 +524,7 @@ class PythImage(object):
             images = tif.asarray()
             
             #Load metadata
-            ome_metadata=PythImage.xml2dict(tif[0].tags['image_description'].value, sanitize=True, prefix=None)
+            ome_metadata=utils.xml2dict(tif[0].tags['image_description'].value, sanitize=True, prefix=None)
             #pixel_metadata=ome_metadata['OME']['Image']['Pixels']
             
        
@@ -727,76 +708,7 @@ class PythImage(object):
         self.__metadata['DimensionOrder']=''.join(order_final)
         
 
-    def xml2dict( xml, sanitize=True, prefix=None):
-        """Return XML as dict. Adapted from 	the tiffile package authored b Christoph .
-    
-        >>> xml2dict('<?xml version="1.0" ?><root attr="name"><key>1</key></root>')
-        {'root': {'key': 1, 'attr': 'name'}}
-    
-        """
-        from xml.etree import cElementTree as etree  # delayed import
-    
-        def asbool(value, true=(b'true', u'true'), false=(b'false', u'false')):
-            """Return string as bool if possible, else raise TypeError.
-        
-            >>> asbool(b' False ')
-            False
-        
-            """
-            value = value.strip().lower()
-            if value in true:  # might raise UnicodeWarning/BytesWarning
-                return True
-            if value in false:
-                return False
-            raise TypeError()
-    
-    
-        def astype(value):
-            # return value as int, float, bool, or str
-            for t in (int, float, asbool):
-                try:
-                    return t(value)
-                except Exception:
-                    pass
-            return value
-    
-        def etree2dict(t):
-            '''Convert eTree object to dict. 
-            Adapted from https://stackoverflow.com/a/10077069/453463
-            '''
-            
-            key = t.tag
-            if sanitize:
-                key = key.rsplit('}', 1)[-1]
-            d = {key: {} if t.attrib else None}
-            children = list(t)
-            if children:
-                dd = collections.defaultdict(list)
-                for dc in map(etree2dict, children):
-                    for k, v in dc.items():
-                        dd[k].append(astype(v))
-                d = {key: {k: astype(v[0]) if len(v) == 1 else astype(v)
-                           for k, v in dd.items()}}
-            if t.attrib:
-                d[key].update((at + k, astype(v)) for k, v in t.attrib.items())
-            if t.text:
-                text = t.text.strip()
-                if children or t.attrib:
-                    if text:
-                        d[key][tx + 'value'] = astype(text)
-                else:
-                    d[key] = astype(text)
-            return d
-        
-        #Decode to avert parsing errors as some software dump large text
-        #fields into the file that occasionally contain erronious chars
-        xml=xml.decode('utf-8', errors='ignore')
-        
-        at = tx = ''
-        if prefix:
-            at, tx = prefix
-        
-        return etree2dict(etree.fromstring(xml))    
+      
     
     @staticmethod
     def metadata_to_ome (metadata, file_name):
@@ -980,8 +892,7 @@ class RoiClass(object):
 
     
         return rr, cc
-             
-   
+ 
                 
 
          
@@ -1012,11 +923,94 @@ class utils():
             length=len(a)
         
         return length
-                
-                
+    
+    @staticmethod            
+    def dict_to_string(d, string='', lvl=0):
+
+        for k, v in d.items():
+            string+='%s%s' % (lvl * '\t', str(k))
+            if type(v) == dict:
+                string+=':%s'%str(v)+'\n'
+                #utils.dict_to_string(v, string, lvl+1)
+            else:
+               string+=':%s'%v+'\n'
+        
+        return string            
      
+    @staticmethod           
+    def xml2dict( xml, sanitize=True, prefix=None):
+        """Return XML as dict. Adapted from 	the tiffile package authored b Christoph .
+    
+        >>> xml2dict('<?xml version="1.0" ?><root attr="name"><key>1</key></root>')
+        {'root': {'key': 1, 'attr': 'name'}}
+    
+        """
+      
 
+        #Decode to avert parsing errors as some software dump large text
+        #fields into the file that occasionally contain erronious chars
+        xml=xml.decode('utf-8', errors='ignore')
+        
 
+        
+        return utils.etree2dict(etree.fromstring(xml), sanitize, prefix) 
+    
+    @staticmethod
+    def asbool(value, true=(b'true', u'true'), false=(b'false', u'false')):
+        """Return string as bool if possible, else raise TypeError.
+    
+        >>> asbool(b' False ')
+        False
+    
+        """
+        value = value.strip().lower()
+        if value in true:  # might raise UnicodeWarning/BytesWarning
+            return True
+        if value in false:
+            return False
+        raise TypeError()
+
+    @staticmethod
+    def astype(value):
+        # return value as int, float, bool, or str
+        for t in (int, float, utils.asbool):
+            try:
+                return t(value)
+            except Exception:
+                pass
+        return value
+    
+    @staticmethod
+    def etree2dict(t, sanitize=True, prefix=None):
+            '''Convert eTree object to dict. 
+            Adapted from https://stackoverflow.com/a/10077069/453463
+            '''
+            at = tx = ''
+            if prefix:
+                at, tx = prefix
+            
+            key = t.tag
+            if sanitize:
+                key = key.rsplit('}', 1)[-1]
+            d = {key: {} if t.attrib else None}
+            children = list(t)
+            if children:
+                dd = collections.defaultdict(list)
+                for dc in map(utils.etree2dict, children):
+                    for k, v in dc.items():
+                        dd[k].append(utils.astype(v))
+                d = {key: {k: utils.astype(v[0]) if len(v) == 1 else utils.astype(v)
+                           for k, v in dd.items()}}
+            if t.attrib:
+                d[key].update((at + k, utils.astype(v)) for k, v in t.attrib.items())
+            if t.text:
+                text = t.text.strip()
+                if children or t.attrib:
+                    if text:
+                        d[key][tx + 'value'] = utils.astype(text)
+                else:
+                    d[key] = utils.astype(text)
+            return d
 #Class for error handling
 class PythImageError(Exception):
     
