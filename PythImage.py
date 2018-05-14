@@ -311,14 +311,14 @@ class PythImage(object):
             for idx, dim in enumerate(order):
                 if dim=='X':
                     slice_object_list[idx]=rr
-                if dim=='Y':
+                elif dim=='Y':
                     slice_object_list[idx]=cc
                 else:    
                     slice_object_list[idx]=slice(None,None,None)
-            slice_object_list=tuple(slice_object_list)
-            
+       
             #Set roi pixel values
             img[slice_object_list] = value
+            #img[:,:,:,cc,rr] = value
 
             #Create new PythImage object
             roi=PythImage(img, roi_metadata )
@@ -1050,7 +1050,7 @@ class PythImageError(Exception):
 
 if __name__ == '__main__':
     
-    path="D:\\Playground\\testerROI2.ome.tif"#"F:\Workspace\images\\test.tif"#simplergb.ome.tif"
+    path="D:\\Playground\\testerROI4.ome.tif"#"F:\Workspace\images\\test.tif"#simplergb.ome.tif"
     a = PythImage.load_image(path, tiffType='ome')
  
     #file_name="tester.ome.tif"
@@ -1062,7 +1062,7 @@ if __name__ == '__main__':
    
     print(a.image.shape)
     print(a)
-    a.roi_to_channel(index=0)
+    a.roi_to_channel(index=2)
     print('safdddddddddd')
     print(a.image.shape)
     print(a.image[0][0][4])
