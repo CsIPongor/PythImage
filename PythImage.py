@@ -245,9 +245,7 @@ class PythImage(object):
     
     
     def append_to_dimension(self, image, dim):
-        print(self.image.shape)
-        shape=(self.metadata['SizeT'], 1, self.metadata['SizeZ'], self.metadata['SizeY'], self.metadata['SizeX'])
-        print(shape)
+        
       
         #Append names
         self.metadata['Name']=utils.concatenate(self.metadata['Name'],image.metadata['Name'])
@@ -268,7 +266,7 @@ class PythImage(object):
        
        
         
-    def roi_to_channel(self, index):
+    def roi_to_channel(self, index, value=1):
       
 
         if 'ROI' in self.metadata.keys():
@@ -279,13 +277,13 @@ class PythImage(object):
                 roi_list=[self.metadata['ROI']]
             elif isinstance(self.metadata['ROI'], list):
                 roi_list=self.metadata['ROI']
-           
-            original_order=self.metadata['DimensionOrder']
-            #Reorder to ensure XY are the first dimensions
-            self.reorder( 'XYZCT')
             
-            #Create a single channel array
-            shape=(self.metadata['SizeT'], 1, self.metadata['SizeZ'], self.metadata['SizeY'], self.metadata['SizeX'])
+            #Check if index is within possible range
+            if index>=len(roi_list):
+                raise IndexError('Only '+str(len(roi_list))+' ROI(s) available!')
+            
+            #Get reversed dimension order
+            order=self.metadata['DimensionOrder'][::-1]
 
             #create metadata dictionary for roi and set channel to 1
             roi_metadata=self.metadata.copy()
@@ -293,24 +291,43 @@ class PythImage(object):
             roi_metadata['Name']=roi_list[index]['ID']
             roi_metadata['SamplesPerPixel']=1
             del roi_metadata['ROI']
-                    
+            
+            #Create shape tuple
+            shape=[1]*len(order)
+            for idx, dim in enumerate(order):
+                if dim!='C':
+                    shape[idx]=self.metadata[self.__dim_translate[dim]]
+                if dim=='C':
+                    shape[idx]=1
+            
+            shape=tuple(shape)
+
             img=np.zeros(shape, dtype=self.metadata['Type'])
             
             rr, cc = RoiClass(roi_list[index]).coordinates
             
-           
-            img[:,:,:,cc, rr] = 1
-                
+            #Create slice object to set value of ROI pixels
+            slice_object_list=[1]*len(order)
+            for idx, dim in enumerate(order):
+                if dim=='X':
+                    slice_object_list[idx]=rr
+                if dim=='Y':
+                    slice_object_list[idx]=cc
+                else:    
+                    slice_object_list[idx]=slice(None,None,None)
+            slice_object_list=tuple(slice_object_list)
+            
+            #Set roi pixel values
+            img[slice_object_list] = value
+
             #Create new PythImage object
             roi=PythImage(img, roi_metadata )
             
             self.append_to_dimension(roi, dim='C')
 
-            #reorder to original dimension order
-            self.reorder(original_order)
             
         else:
-            raise IndexError('No ROI available')
+            raise PythImageError('No ROI available!')
                 
     
     '''
@@ -1033,25 +1050,22 @@ class PythImageError(Exception):
 
 if __name__ == '__main__':
     
-    path="D:\\Playground\\testerROI3.ome.tif"#"F:\Workspace\images\\test.tif"#simplergb.ome.tif"
+    path="D:\\Playground\\testerROI2.ome.tif"#"F:\Workspace\images\\test.tif"#simplergb.ome.tif"
     a = PythImage.load_image(path, tiffType='ome')
  
     #file_name="tester.ome.tif"
     #a.set_metadata('Name', ['4','4'])
     
     path2="D:\\Playground\\testerSAVEED.ome.tif"
-    print('sdasaddsa')
-    print(a.image.shape)
-    b=a[0]
-    
-    print('sdasaddsa')
-    print(a.image.shape)
-    print(b.image.shape)
-    a(T=0)
+
+
+   
     print(a.image.shape)
     print(a)
     a.roi_to_channel(index=0)
-    #print(a)
+    print('safdddddddddd')
+    print(a.image.shape)
+    print(a.image[0][0][4])
  
 
     #a.save_image(path=path2)
