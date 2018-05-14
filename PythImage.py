@@ -13,11 +13,13 @@ import collections
 from itertools import product, chain
 from skimage.draw import polygon, polygon_perimeter, ellipse, line
 from xml.etree import cElementTree as etree 
- 
+import copy 
 
 ##Add channel, remove channel, extract channel etc.
 class PythImage(object):
-    '''
+    
+    '''TOBE FIXED return objects cpy or deepcopy etc.
+    
     '''
     
     __protected=['SizeT', 'SizeC','SizeZ', 'SizeX','SizeY', 'SamplesPerPixel', 'Type', 'DimensionOrder']
@@ -43,23 +45,26 @@ class PythImage(object):
        
         self.reorder(dimension_order)
         
-        dim_translate={'T':'SizeT', 'C':'SizeC', 'Z':'SizeZ', 'X':'SizeX', 'Y': 'SizeY'}
         shape=tuple(reversed(list(self.__image.shape)))
+        metadata_new=self.__metadata.copy()
         for dim in dimension_order:
             if dim in ('T', 'C', 'Z'):
                 if isinstance(local_dict[dim], int):
-                    self.__metadata[self.__dim_translate[dim]]=1
+                    metadata_new[self.__dim_translate[dim]]=1
                 if isinstance(local_dict[dim], list):    
-                    self.__metadata[self.__dim_translate[dim]]=len(local_dict[dim])
-                
-        return self.__init__(image=self.__image[indexes],metadata=self.__metadata )
+                    metadata_new[self.__dim_translate[dim]]=len(local_dict[dim])
+        
+        return self.__init__(image=self.__image[indexes].copy(),metadata=metadata_new)
     
     
     def __getitem__(self, key):
+        
 
         shape=self.__image.shape
-        metadata=self.__metadata.copy()
+        metadata=copy.deepcopy(self.__metadata)
+        image=copy.deepcopy(self.__image[key])
         order=tuple(reversed(list(metadata['DimensionOrder'])))
+        
         
         if isinstance(key, (int,slice)):
             key=[key]
@@ -68,7 +73,7 @@ class PythImage(object):
      
         for i in range(len(key)):
             
-            length=PythImage.__slice_length__(key[i], shape[i])
+            length=PythImage.__slice_length(key[i], shape[i])
             dim_current=order[i]
             
             if dim_current=='C':
@@ -76,15 +81,14 @@ class PythImage(object):
                 metadata['SamplesPerPixel']=np.squeeze(metadata['SamplesPerPixel'][key[i]]).tolist()
             metadata[self.__dim_translate[dim_current]]=length
         
-    
-        return self.__init__(image=self.__image[key].copy() ,metadata=metadata )
+        return PythImage(image=image ,metadata=metadata)
     
     def __repr__(self):
         return utils.dict_to_string(self.__metadata)     
     
     def __getattr__(self, atr):
-        raise AttributeError("Attribute: '"+str(atr)+"' is not available!")    
-            
+        raise AttributeError("Attribute: '"+str(atr)+"' is not available!")           
+   
     @property
     def image(self):
         return self.__image
@@ -241,11 +245,14 @@ class PythImage(object):
     
     
     def append_to_dimension(self, image, dim):
+        print(self.image.shape)
+        shape=(self.metadata['SizeT'], 1, self.metadata['SizeZ'], self.metadata['SizeY'], self.metadata['SizeX'])
+        print(shape)
       
         #Append names
         self.metadata['Name']=utils.concatenate(self.metadata['Name'],image.metadata['Name'])
         self.metadata['SamplesPerPixel']=utils.concatenate(self.metadata['SamplesPerPixel'], image.metadata['SamplesPerPixel'])
-        print(self.metadata.keys())
+ 
         #Get original dimension order
         original_order=self.metadata['DimensionOrder']
     
@@ -265,6 +272,7 @@ class PythImage(object):
       
 
         if 'ROI' in self.metadata.keys():
+          
             
             #Generate roi list. If image has multiple ROI-s, metadata['ROI'] is a list.
             if isinstance(self.metadata['ROI'], dict):
@@ -275,11 +283,11 @@ class PythImage(object):
             original_order=self.metadata['DimensionOrder']
             #Reorder to ensure XY are the first dimensions
             self.reorder( 'XYZCT')
+            
             #Create a single channel array
             shape=(self.metadata['SizeT'], 1, self.metadata['SizeZ'], self.metadata['SizeY'], self.metadata['SizeX'])
 
             #create metadata dictionary for roi and set channel to 1
-            
             roi_metadata=self.metadata.copy()
             roi_metadata['SizeC']=1
             roi_metadata['Name']=roi_list[index]['ID']
@@ -1032,10 +1040,18 @@ if __name__ == '__main__':
     #a.set_metadata('Name', ['4','4'])
     
     path2="D:\\Playground\\testerSAVEED.ome.tif"
+    print('sdasaddsa')
+    print(a.image.shape)
+    b=a[0]
     
-    
-    a.roi_to_channel(index=0)
+    print('sdasaddsa')
+    print(a.image.shape)
+    print(b.image.shape)
+    a(T=0)
+    print(a.image.shape)
     print(a)
+    a.roi_to_channel(index=0)
+    #print(a)
  
 
     #a.save_image(path=path2)
