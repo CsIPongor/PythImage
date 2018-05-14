@@ -102,7 +102,7 @@ class PythImage(object):
           
     @property
     def metadata(self):
-        return self.__metadata
+        raise PythImageError('Metadata is a protected attribute. Please use: get_metadata, set_metadata to get/set keys!','')
     
     @metadata.setter
     def metadata(self, value):
@@ -110,7 +110,11 @@ class PythImage(object):
         self.__validate(self.__image, value)
         #Set metadata
         self.__metadata=value
-     
+    
+    #def metadata_dict(self):
+        #return copy.deepcopy(self.__metadata)
+    
+    
     @classmethod              
     def load_image(cls, path, tiffType='imageJ', **kwargs):
         '''
@@ -158,8 +162,7 @@ class PythImage(object):
         #Return first timeframe
         return cls(image=image, metadata=metadata)
     
-   
-    
+
     def __validate(self, image, metadata):
 
         #Check if image is numpy array and metadata is dict
@@ -207,6 +210,8 @@ class PythImage(object):
     
     @staticmethod
     def __slice_length(slice_object, object_length):
+        '''Calculate length of slice from slice object.
+        '''
         if isinstance(slice_object, int):
             slice_length=1 
         if isinstance(slice_object, slice):
@@ -248,11 +253,11 @@ class PythImage(object):
         
       
         #Append names
-        self.metadata['Name']=utils.concatenate(self.metadata['Name'],image.metadata['Name'])
-        self.metadata['SamplesPerPixel']=utils.concatenate(self.metadata['SamplesPerPixel'], image.metadata['SamplesPerPixel'])
+        self.__metadata['Name']=utils.concatenate(self.__metadata['Name'],image.get_metadata('Name'))
+        self.__metadata['SamplesPerPixel']=utils.concatenate(self.__metadata['SamplesPerPixel'], image.get_metadata('SamplesPerPixel'))
  
         #Get original dimension order
-        original_order=self.metadata['DimensionOrder']
+        original_order=self.__metadata['DimensionOrder']
     
         #reshape image so the two confer
         image.reorder(original_order)
@@ -260,7 +265,7 @@ class PythImage(object):
         #Get the index of the given dimension in the shape of the image
         ind=len(original_order)-original_order.index('C')-1
         
-        self.metadata[self.__dim_translate[dim]]=self.metadata[self.__dim_translate[dim]]+image.metadata[self.__dim_translate[dim]]
+        self.__metadata[self.__dim_translate[dim]]=self.__metadata[self.__dim_translate[dim]]+image.get_metadata(self.__dim_translate[dim])
 
         self.image=np.concatenate((self.image,image.image), axis=ind)
        
@@ -269,24 +274,24 @@ class PythImage(object):
     def roi_to_channel(self, index, value=1):
       
 
-        if 'ROI' in self.metadata.keys():
+        if 'ROI' in self.__metadata.keys():
           
             
             #Generate roi list. If image has multiple ROI-s, metadata['ROI'] is a list.
-            if isinstance(self.metadata['ROI'], dict):
-                roi_list=[self.metadata['ROI']]
-            elif isinstance(self.metadata['ROI'], list):
-                roi_list=self.metadata['ROI']
+            if isinstance(self.__metadata['ROI'], dict):
+                roi_list=[self.__metadata['ROI']]
+            elif isinstance(self.__metadata['ROI'], list):
+                roi_list=self.__metadata['ROI']
             
             #Check if index is within possible range
             if index>=len(roi_list):
                 raise IndexError('Only '+str(len(roi_list))+' ROI(s) available!')
             
             #Get reversed dimension order
-            order=self.metadata['DimensionOrder'][::-1]
+            order=self.__metadata['DimensionOrder'][::-1]
 
             #create metadata dictionary for roi and set channel to 1
-            roi_metadata=self.metadata.copy()
+            roi_metadata=self.__metadata.copy()
             roi_metadata['SizeC']=1
             roi_metadata['Name']=roi_list[index]['ID']
             roi_metadata['SamplesPerPixel']=1
@@ -296,13 +301,13 @@ class PythImage(object):
             shape=[1]*len(order)
             for idx, dim in enumerate(order):
                 if dim!='C':
-                    shape[idx]=self.metadata[self.__dim_translate[dim]]
+                    shape[idx]=self.__metadata[self.__dim_translate[dim]]
                 if dim=='C':
                     shape[idx]=1
             
             shape=tuple(shape)
 
-            img=np.zeros(shape, dtype=self.metadata['Type'])
+            img=np.zeros(shape, dtype=self.__metadata['Type'])
             
             rr, cc = RoiClass(roi_list[index]).coordinates
             
@@ -333,19 +338,19 @@ class PythImage(object):
     '''
     def __update_metadata__(self):
         
-        order=self.metadata['DimensionOrder']
+        order=self.__metadata['DimensionOrder']
         
         
         
         print(len(order))
         
         #remove singleton dimensions
-        dim_translate={'T':self.metadata['SizeT'], 'C':self.metadata['SizeC'], 'Z':self.metadata['SizeZ'], 'X':self.metadata['SizeX'], 'Y': self.metadata['SizeY']}
+        dim_translate={'T':self.__metadata['SizeT'], 'C':self.__metadata['SizeC'], 'Z':self.__metadata['SizeZ'], 'X':self.__metadata['SizeX'], 'Y': self.__metadata['SizeY']}
         singleton_dim=[key for key in dim_translate if int(dim_translate[key])<=1]
         
         for i in range(len(order)):
             key=dim_translate[order[i]]
-            self.metadata[key]=shape[i]
+            self.__metadata[key]=shape[i]
         
     '''    
         
@@ -354,7 +359,7 @@ class PythImage(object):
         Save Image. Metadata not saved currently!!
         '''
    
-        if 'S' in self.metadata['DimensionOrder']:
+        if 'S' in self.__metadata['DimensionOrder']:
             order_final='SXYCZT'
         else:
            order_final='XYCZT'
@@ -369,7 +374,7 @@ class PythImage(object):
             #for index, (i, j, k) in enumerate(product(range(metadata['SizeC']), range(metadata['SizeT']), range(metadata['SizeZ']))):
             for i, j, k in product(range(self.__image.shape[0]),range(self.__image.shape[1]),range(self.__image.shape[2])):
 
-                 tif.save(self.__image([i][j][k]), description=PythImage.metadata_to_ome(self.__metadata, file_name ))
+                 tif.save(self.__image([i][j][k]), description=PythImageself.__metadata_to_ome(self.__metadata, file_name ))
     
     def save_image2(image, path, file_name):
         '''
@@ -1059,13 +1064,11 @@ if __name__ == '__main__':
     path2="D:\\Playground\\testerSAVEED.ome.tif"
 
 
-   
+
     print(a.image.shape)
-    print(a)
-    a.roi_to_channel(index=2)
-    print('safdddddddddd')
-    print(a.image.shape)
-    print(a.image[0][0][4])
+
+    a.roi_to_channel(index=1)
+
  
 
     #a.save_image(path=path2)
@@ -1074,7 +1077,7 @@ if __name__ == '__main__':
 
 
    
-    #print(a[0].metadata)
+    #print(a[0]self.__metadata)
     #a(T=slice([':']))
     #a(C=0,T=0)
     #print(a)
@@ -1085,7 +1088,7 @@ if __name__ == '__main__':
     
 
     #path2="D:\\Playground\\testerDD.ome.tif"
-    #ImageClass.save_image(a.image, path2, a.metadata_to_ome(a.metadata, file_name ) )
+    #ImageClass.save_image(a.image, path2, aself.__metadata_to_ome(aself.__metadata, file_name ) )
     
 
 
