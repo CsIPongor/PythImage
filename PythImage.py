@@ -87,7 +87,7 @@ class PythImage(object):
         return utils.dict_to_string(self.__metadata)     
     
     def __getattr__(self, atr):
-        raise AttributeError("Attribute: '"+str(atr)+"' is not available!")           
+        raise AttributeError("Attribute: "+str(atr)+" is not available!")           
    
     @property
     def image(self):
@@ -372,7 +372,7 @@ class PythImage(object):
             #for index, (i, j, k) in enumerate(product(range(metadata['SizeC']), range(metadata['SizeT']), range(metadata['SizeZ']))):
             for i, j, k in product(range(self.__image.shape[0]),range(self.__image.shape[1]),range(self.__image.shape[2])):
 
-                 tif.save(self.__image([i][j][k]), description=self.__metadata_to_ome(self.__metadata, file_name ))
+                 tif.save(self.__image[i][j][k], description=self.metadata_to_ome(self.__metadata, file_name ))
     
     def save_image2(image, path, file_name):
         '''
@@ -1069,7 +1069,7 @@ if __name__ == '__main__':
 
  
 
-    #a.save_image(path=path2)
+    a.save_image(path=path2)
    
    
 
