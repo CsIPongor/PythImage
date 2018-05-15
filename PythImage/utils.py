@@ -1,7 +1,6 @@
 import collections
 from xml.etree import cElementTree as etree 
 
-@staticmethod
 def concatenate(a,b):
     '''
     Append elements of two lists using slice notation. Elements of list b are added to the end of a.
@@ -15,8 +14,7 @@ def concatenate(a,b):
     return a                  
 
 
-    
-@staticmethod
+
 def length(a):
     '''
     Append elements of two lists using slice notation. Elements of list b are added to the end of a.
@@ -28,7 +26,7 @@ def length(a):
     
     return length
 
-@staticmethod            
+           
 def dict_to_string(d, string='', lvl=0):
 
     for k, v in d.items():
@@ -41,7 +39,7 @@ def dict_to_string(d, string='', lvl=0):
     
     return string            
  
-@staticmethod           
+          
 def xml2dict( xml, sanitize=True, prefix=None):
     """Return XML as dict. Adapted from 	the tiffile package authored b Christoph .
 
@@ -57,9 +55,8 @@ def xml2dict( xml, sanitize=True, prefix=None):
     
 
     
-    return utils.etree2dict(etree.fromstring(xml), sanitize, prefix) 
+    return etree2dict(etree.fromstring(xml), sanitize, prefix) 
 
-@staticmethod
 def asbool(value, true=(b'true', u'true'), false=(b'false', u'false')):
     """Return string as bool if possible, else raise TypeError.
 
@@ -74,17 +71,17 @@ def asbool(value, true=(b'true', u'true'), false=(b'false', u'false')):
         return False
     raise TypeError()
 
-@staticmethod
+
 def astype(value):
     # return value as int, float, bool, or str
-    for t in (int, float, utils.asbool):
+    for t in (int, float, asbool):
         try:
             return t(value)
         except Exception:
             pass
     return value
 
-@staticmethod
+
 def etree2dict(t, sanitize=True, prefix=None):
         '''Convert eTree object to dict. 
         Adapted from https://stackoverflow.com/a/10077069/453463
@@ -100,18 +97,19 @@ def etree2dict(t, sanitize=True, prefix=None):
         children = list(t)
         if children:
             dd = collections.defaultdict(list)
-            for dc in map(utils.etree2dict, children):
+            for dc in map(etree2dict, children):
                 for k, v in dc.items():
-                    dd[k].append(utils.astype(v))
-            d = {key: {k: utils.astype(v[0]) if len(v) == 1 else utils.astype(v)
+                    dd[k].append(astype(v))
+            d = {key: {k: astype(v[0]) if len(v) == 1 else astype(v)
                        for k, v in dd.items()}}
         if t.attrib:
-            d[key].update((at + k, utils.astype(v)) for k, v in t.attrib.items())
+            d[key].update((at + k, astype(v)) for k, v in t.attrib.items())
+        
         if t.text:
             text = t.text.strip()
             if children or t.attrib:
                 if text:
-                    d[key][tx + 'value'] = utils.astype(text)
+                    d[key][tx + 'value'] = astype(text)
             else:
-                d[key] = utils.astype(text)
+                d[key] = astype(text)
         return d

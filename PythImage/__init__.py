@@ -1,10 +1,14 @@
 import os
 import numpy as np
 from skimage.external.tifffile import TiffFile, TiffWriter
-import copy 
+import copy
+from itertools import product
+
+from . import utils
+from .roi import RoiClass
 
 ##Add channel, remove channel, extract channel etc.
-class PythImage(object):
+class ImageClass(object):
     
     '''TOBE FIXED return objects cpy or deepcopy etc.
     
@@ -61,7 +65,7 @@ class PythImage(object):
      
         for i in range(len(key)):
             
-            length=PythImage.__slice_length(key[i], shape[i])
+            length=ImageClass.__slice_length(key[i], shape[i])
             dim_current=order[i]
             
             if dim_current=='C':
@@ -69,7 +73,7 @@ class PythImage(object):
                 metadata['SamplesPerPixel']=np.squeeze(metadata['SamplesPerPixel'][key[i]]).tolist()
             metadata[self.__dim_translate[dim_current]]=length
         
-        return PythImage(image=image ,metadata=metadata)
+        return ImageClass(image=image ,metadata=metadata)
     
     def __repr__(self):
         return utils.dict_to_string(self.__metadata)     
@@ -113,16 +117,16 @@ class PythImage(object):
 
             
             #Load image and create simplified metadata dictionary
-            image, ome_metadata=PythImage.load_ome(path)
-            metadata=PythImage.convert_ome_metadata(ome_metadata)
+            image, ome_metadata=ImageClass.load_ome(path)
+            metadata=ImageClass.convert_ome_metadata(ome_metadata)
 
                    
         elif tiffType=='imagej':
             
             #Load image and create simplified metadata dictionary
-            image, imagej_metadata=PythImage.load_imagej(path)
+            image, imagej_metadata=ImageClass.load_imagej(path)
             
-            metadata=PythImage.convert_imagej_metadata(imagej_metadata)
+            metadata=ImageClass.convert_imagej_metadata(imagej_metadata)
             
             '''        
             dim_order_final='XYZCT'
@@ -142,8 +146,8 @@ class PythImage(object):
         
         elif tiffType=='tiff':
              #Load image and create simplified metadata dictionary
-            image, metadata=PythImage.load_tiff(path)
-            metadata=PythImage.convert_tiff_metadata(metadata, order=kwargs['order'], shape=kwargs['shape'])
+            image, metadata=ImageClass.load_tiff(path)
+            metadata=ImageClass.convert_tiff_metadata(metadata, order=kwargs['order'], shape=kwargs['shape'])
         
         #Return first timeframe
         return cls(image=image, metadata=metadata)
@@ -311,8 +315,8 @@ class PythImage(object):
             img[slice_object_list] = value
             #img[:,:,:,cc,rr] = value
 
-            #Create new PythImage object
-            roi=PythImage(img, roi_metadata )
+            #Create new ImageClass object
+            roi=ImageClass(img, roi_metadata )
             
             self.append_to_dimension(roi, dim='C')
 

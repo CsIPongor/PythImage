@@ -1,4 +1,7 @@
 from skimage.draw import polygon, polygon_perimeter, ellipse, line
+import numpy as np
+
+from . import utils
 
 class RoiClass(object):
     
