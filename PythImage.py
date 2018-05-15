@@ -110,9 +110,7 @@ class PythImage(object):
         self.__validate(self.__image, value)
         #Set metadata
         self.__metadata=value
-    
-    #def metadata_dict(self):
-        #return copy.deepcopy(self.__metadata)
+
     
     
     @classmethod              
@@ -374,7 +372,7 @@ class PythImage(object):
             #for index, (i, j, k) in enumerate(product(range(metadata['SizeC']), range(metadata['SizeT']), range(metadata['SizeZ']))):
             for i, j, k in product(range(self.__image.shape[0]),range(self.__image.shape[1]),range(self.__image.shape[2])):
 
-                 tif.save(self.__image([i][j][k]), description=PythImageself.__metadata_to_ome(self.__metadata, file_name ))
+                 tif.save(self.__image([i][j][k]), description=self.__metadata_to_ome(self.__metadata, file_name ))
     
     def save_image2(image, path, file_name):
         '''
