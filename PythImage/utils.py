@@ -1,24 +1,50 @@
 import collections
 from xml.etree import cElementTree as etree 
+import traceback
 
-def concatenate(a,b):
-    '''
-    Append elements of two lists using slice notation. Elements of list b are added to the end of a.
-    '''
-    if not isinstance(a, collections.Iterable) or isinstance(a, (str,dict)):
-        a=[a]
-    if not isinstance(b, collections.Iterable) or isinstance(b, (str,dict)):
-        b=[b]
-    a[len(a):len(a)]=b
+#Class for error handling
+class PythImageError(Exception):
+    
+    def __init__(self, message, errors):
+        
+        super(PythImageError, self).__init__(message)
+        
+        self.traceback=str(traceback.format_exc()).replace('\n', '\n\t\t')
+        self.message = message
+        self.errors = errors
+    
+    def __str__(self):
+               
+        return repr(self.message)#+"\n\nERROR:"+repr(self.errors)+"\n\nTRACEBACK:"+str(self.traceback)
 
-    return a                  
+class lazyattr(object):
+    """Attribute whose value is computed on first access. As in tifffile.py from Christoph Gohlke"""
 
+
+    def __init__(self, func):
+        self.func = func
+
+
+    def __get__(self, instance, owner):
+        # with self.lock:
+        if instance is None:
+            return self
+        try:
+            value = self.func(instance)
+        except AttributeError as e:
+            raise RuntimeError(e)
+        if value is NotImplemented:
+            return getattr(super(owner, instance), self.func.__name__)
+        setattr(instance, self.func.__name__, value)
+        return value 
+             
 
 
 def length(a):
     '''
     Append elements of two lists using slice notation. Elements of list b are added to the end of a.
     '''
+  
     if not isinstance(a, collections.Iterable) or isinstance(a, str):
         length=1
     else:
@@ -48,11 +74,10 @@ def xml2dict( xml, sanitize=True, prefix=None):
 
     """
   
-
+    
     #Decode to avert parsing errors as some software dump large text
     #fields into the file that occasionally contain erronious chars
     xml=xml.decode('utf-8', errors='ignore')
-    
 
     
     return etree2dict(etree.fromstring(xml), sanitize, prefix) 
@@ -113,3 +138,29 @@ def etree2dict(t, sanitize=True, prefix=None):
             else:
                 d[key] = astype(text)
         return d
+    
+def represents_type(s, atype):
+    '''
+    Check if string represents type given through atype!
+    '''
+    try: 
+        atype(s)
+        return True
+    except ValueError:
+        return False  
+
+    
+def concatenate(a,b):
+    '''
+    Append elements of two lists using slice notation. Elements of list b are added to the end of a.
+    '''
+    if not isinstance(a, collections.Iterable) or isinstance(a, (str,dict)):
+        a=[a]
+    if not isinstance(b, collections.Iterable) or isinstance(b, (str,dict)):
+        b=[b]
+    a[len(a):len(a)]=b
+
+    return a   
+
+def list_of(lst, object_type):
+    return any((isinstance(x, object_type) for x in lst))
