@@ -7,7 +7,7 @@ Created on Tue May 15 11:28:54 2018
 from PythImage import ImageClass
 
 
-path="D:\\Playground\\testerROI4.ome.tif"#"F:\Workspace\images\\test.tif"#simplergb.ome.tif"
+path="D:\\Playground\\hansolo.ome.tif"#"F:\Workspace\images\\test.tif"#simplergb.ome.tif"
 a = ImageClass.load_image(path, tiffType='ome')
  
 #file_name="tester.ome.tif"
@@ -19,7 +19,7 @@ path2="D:\\Playground\\testerSAVEED.ome.tif"
 
 print(a.image.shape)
 
-a.roi_to_channel(index=1)
+#a.roi_to_channel(index=0)
 
 print(a) 
 
