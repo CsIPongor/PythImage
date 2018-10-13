@@ -47,15 +47,19 @@ def load_image(path):
                 metadata['image_description']=description
               
             elif tag.name=='imagej_metadata':
-            
-                #imagej_parse_overlay accepts list of ndarrays 
-                overlays=tif.pages[0].imagej_tags.overlays
-                if isinstance(overlays, np.ndarray):
-                    overlays=np.array([overlays], dtype='uint8')
-                    metadata['imagej_metadata']={'overlays':imagej_parse_overlay(overlays)}
-                else:
-                    metadata['imagej_metadata']={'overlays':[imagej_parse_overlay(element) for element in overlays]}
-                                
+                #imagej_parse_overlay accepts list of ndarrays
+#asdadasdasdsadsa        
+                try:
+                    if 'overlays' in tif.pages[0].imagej_tags.values():
+                        overlays=tif.pages[0].imagej_tags.overlays
+                        if isinstance(overlays, np.ndarray):
+                            overlays=np.array([overlays], dtype='uint8')
+                            metadata['imagej_metadata']={'overlays':imagej_parse_overlay(overlays)}
+                        else:
+                            metadata['imagej_metadata']={'overlays':[imagej_parse_overlay(element) for element in overlays]}
+                except:
+                    pass
+                
             #Tiff tags            
             else:
                 metadata[tag.name]=tag.value
@@ -118,7 +122,7 @@ def convert_metadata(metadata_dict):
 
     #Create Samples per pixel and channel name list    
     metadata_dict_out['SamplesPerPixel']=[metadata_dict['samples_per_pixel']]*metadata_dict_out['SizeC']
-    metadata_dict_out['Name']=['Ch'+str(i) for i in range(metadata_dict_out['SizeC'])]
+    metadata_dict_out['Name']=['Ch'+str(i+1) for i in range(metadata_dict_out['SizeC'])]
 
     #Create image type list and check if all bitdepths are equal
     if not isinstance(metadata_dict['bits_per_sample'], int) :

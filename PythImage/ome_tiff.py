@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 ###############################################################################
 #Functions to load and save OME-tiff images. Images are loaded using the 
 #Tifffile package (https://www.lfd.uci.edu/~gohlke/code/tifffile.py.html)
@@ -5,18 +6,19 @@
 #metadata dictionary. If image contains ROI the structure of the OME-Tiff 
 #metadata dictionary returned by Tifffile is used.
 ###############################################################################
-
+#dfdsf
 from skimage.external.tifffile import TiffFile, TiffWriter
 import os
 from . import utils
 from itertools import product
 #from ..RoiClass import Roi
 from .roi import shapes
+
 import warnings
 
 
-__dim_orders=['XYZCT','XYZTC','XYCTZ','XYCZT','XYTCZ','XYTZC']
-	
+DIM_ORDERS=['XYZCT','XYZTC','XYCTZ','XYCZT','XYTCZ','XYTZC']
+BIT_DEPTH_LOOKUP={'uint8':'uint8','uint16':'uint16', 'uint32':'uint32', 'float':'float32','double':'float64'}	
 
 def load_image(path):
     '''
@@ -33,20 +35,17 @@ def load_image(path):
     
     with TiffFile(path, is_ome=True) as tif:
                 
-
         #Check if image is OME-Tiff
-        if not tif.is_ome:
-            raise TypeError('The file is corrupt or not an OME-tiff file!')
+        #if not tif.is_ome:
+            #raise TypeError('The file is corrupt or not an OME-tiff file!')
       
         #Load image into nd array
         images = tif.asarray()
         
         #Load metadata
         ome_metadata=utils.xml2dict(tif[0].tags['image_description'].value, sanitize=True, prefix=None)
-        
+
     return images, ome_metadata
-
-
 
 
 def convert_metadata(metadata_dict):
@@ -72,7 +71,7 @@ def convert_metadata(metadata_dict):
         metadata_dict_out['SamplesPerPixel']=[dic['SamplesPerPixel']  for dic in pixels_dict['Channel'] if 'SamplesPerPixel' in dic.keys()]
         
         #samples_list=[dic['SamplesPerPixel']  for dic in pixels_dict['Channel'] if 'SamplesPerPixel' in dic.keys()]
-        name_list=[dic['Name'] if 'Name' in dic.keys() else 'Ch'+str(index) for index, dic in enumerate(pixels_dict['Channel'])]
+        name_list=[dic['Name'] if 'Name' in dic.keys() else 'Ch'+str(index+1) for index, dic in enumerate(pixels_dict['Channel'])]
         metadata_dict_out['Name']=[]
         for idx, name in enumerate(name_list):
             if metadata_dict_out['SamplesPerPixel'][idx]==1:
@@ -95,21 +94,25 @@ def convert_metadata(metadata_dict):
         else: 
             for n in range(metadata_dict_out['SamplesPerPixel']):
                metadata_dict_out['Name'].append(name+'_S'+str(n))
-
- 
+     
+    #Set metadata type from ome type to numpy array
+    metadata_dict_out['Type']=BIT_DEPTH_LOOKUP[metadata_dict_out['Type']]
+             
     #Get ROI-s if present
     if 'ROI' in metadata_dict['OME'].keys():
        metadata_dict_out['ROI']=metadata_dict['OME']['ROI']
      
     return metadata_dict_out
 
-
 def metadata_to_ome (metadata, file_name):
     '''
     Convert internal metadata representation to conform with ome/tiff specification.
     '''
     import uuid
-    from xml.etree import cElementTree as etree 
+    from xml.etree import cElementTree as etree
+    
+    #Set metadata type from ome type to numpy array
+    metadata['Type']=utils.value_to_key(BIT_DEPTH_LOOKUP, metadata['Type'])
     
     #Generate uuid
     uid=str(uuid.uuid1())
@@ -122,8 +125,7 @@ def metadata_to_ome (metadata, file_name):
     ome_xml=etree.Element('OME', attrib)
 
     if 'ROI' in metadata.keys():
-
-        
+ 
         if not isinstance(metadata['ROI'], list):
             metadata['ROI']=[metadata['ROI']]
             
@@ -131,8 +133,6 @@ def metadata_to_ome (metadata, file_name):
             
             roi_attrib={str(key):str(metadata['ROI'][index][key]) for key in metadata['ROI'][index].keys() if key not in ['Union']} 
             roi_element=etree.Element('ROI', roi_attrib)
-            
-            
             
             #Create list of shapes
             if isinstance(metadata['ROI'][index]['Union']['Shape'], list):
@@ -170,6 +170,7 @@ def metadata_to_ome (metadata, file_name):
     pixels_attrib={str(key):str(metadata[key]) for key in metadata.keys() if key not in ['Name','SamplesPerPixel','ROI']}  
     pixels_attrib.update({"BigEndian":"false", "DimensionOrder":metadata["DimensionOrder"], "ID":"Pixels:0"}) 
     pixels_element=etree.Element('Pixels', pixels_attrib)
+    
     #Generate Channel elements and add to Pixels element
     if isinstance(metadata['SamplesPerPixel'], list):
         samples_list=metadata['SamplesPerPixel']
@@ -193,14 +194,14 @@ def metadata_to_ome (metadata, file_name):
     
     #Add Image Element to OME Element
     ome_xml.append(image_element)
-       
+    
     return etree.tostring(ome_xml, encoding="utf-8")   
         
 def save_image(image, metadata, directory, file_name):
     '''
     Save Image. Metadata not saved currently!!
-    '''  
-
+    ''' 
+    
     if metadata["DimensionOrder"]=='XYZCT':
         
         with TiffWriter(os.path.join(directory, file_name)) as tif:

@@ -1,7 +1,5 @@
 import numpy as np
 import copy
-
-
 #from .RoiClass import Roi 
 from . import imagej_tiff 
 from . import ome_tiff
@@ -11,17 +9,16 @@ from . import utils
 
 
 ##Add channel, remove channel, extract channel etc.
-class Image(object):
+class ImageClass(object):
     
-    '''TOBE FIXED return objects cpy or deepcopy etc.
+    #!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!TOBE FIXED return objects cpy or deepcopy etc.
     
     '''
+    '''
+    __PROTECTED=['SizeT', 'SizeC','SizeZ', 'SizeX','SizeY', 'SamplesPerPixel', 'Type', 'DimensionOrder']
+    __DIM_TRANSLATE={'T':'SizeT', 'C':'SizeC', 'Z':'SizeZ', 'X':'SizeX', 'Y': 'SizeY'}#, 'S':'SamplesPerPixel'}
+    #__BIT_DEPTH_LOOKUP=ome_tiff.BIT_DEPTH_LOOKUP
     
-    __protected=['SizeT', 'SizeC','SizeZ', 'SizeX','SizeY', 'SamplesPerPixel', 'Type', 'DimensionOrder']
-    __dim_translate={'T':'SizeT', 'C':'SizeC', 'Z':'SizeZ', 'X':'SizeX', 'Y': 'SizeY'}#, 'S':'SamplesPerPixel'}
-
-    #Translate ome type to numpy
-    __bit_depth_lookup={'uint8':'uint8','uint16':'uint16', 'uint32':'uint32', 'float':'float32','double':'float64'}
     
     def __init__(self, ndarray, metadata):
 
@@ -50,22 +47,23 @@ class Image(object):
      
         for i in range(len(key)):
             
-            length=Image.__slice_length(key[i], shape[i])
+            length=ImageClass.__slice_length(key[i], shape[i])
             dim_current=order[i]
             
             if dim_current=='C':
                 metadata['Name']=np.squeeze(metadata['Name'][key[i]]).tolist()
                 metadata['SamplesPerPixel']=np.squeeze(metadata['SamplesPerPixel'][key[i]]).tolist()
-            metadata[self.__dim_translate[dim_current]]=length
+            metadata[self.__DIM_TRANSLATE[dim_current]]=length
         
-        return Image(image=image ,metadata=metadata)
+        return ImageClass(image , metadata)
     
     def __repr__(self):
-     
-        return utils.dict_to_string(self.__metadata)     
+        rep='Shape:'+str(self.image.shape)+'\n'+utils.dict_to_string(self.__metadata)
+        return rep      
     
     def __getattr__(self, atr):
-        raise AttributeError("Attribute: "+str(atr)+" is not available!")           
+        raise AttributeError("Attribute: "+str(atr)+" is not available!")
+         
    
     @property
     def image(self):
@@ -91,57 +89,77 @@ class Image(object):
         self.__metadata=value
   
     @classmethod              
-    def load(cls, path, file_type='imageJ', **kwargs):
+    def load(cls, path, file_type=None):
         '''
         Load image stack from path. RGB images are not supported currently and only first frame is returned.
         '''
-        
-        kwargs=dict(**kwargs)
-        
-        if file_type=='ome':
+        #Define functions to load different filetypes
+        def ome(path):
         
             #Load image and create simplified metadata dictionary
             image, ome_metadata=ome_tiff.load_image(path)
-      
+    
             metadata=ome_tiff.convert_metadata(ome_metadata)
-             
-        elif file_type=='imagej':
             
+            return image, metadata
+    
+  
+        def imagej(path):
             #Load image and create simplified metadata dictionary
             image, imagej_metadata=imagej_tiff.load_image(path)
             
-            metadata=imagej_tiff.convert_metadata(imagej_metadata)   
+            metadata=imagej_tiff.convert_metadata(imagej_metadata) 
+            
+            return image, metadata
         
+        #Define dictionary of loader functions
+        loader_dict={'ome':ome,'imagej':imagej}
+
+        #Open Image
+        if file_type==None:
+            
+                for loader in loader_dict.values():
+                    try:
+                        image, metadata=loader(path)
+                    except:
+                        pass
+ 
+
+        elif file_type in loader_dict.keys():
+            image, metadata=loader_dict[file_type](path)    
+        
+        if 'image' not in locals():
+            raise Exception('Currently only {} files are supported!'.format(list(loader_dict.keys())))
        
-        #Return first timeframe
-        return cls(ndarray=image, metadata=metadata)
+
+        return cls(image, metadata)
     
+
+
               
     def save(self, directory, file_name):
         '''
         Load image stack from path. RGB images are not supported currently and only first frame is returned.
-        '''
-        
+        '''        
         #Load image and create simplified metadata dictionary
-        #print(self.image.shape)
         self.reorder('XYZCT')
-        #print(self.image.shape)
-        ome_tiff.save_image(self.image,self.metadata, directory, file_name)
-                 
 
-     
+        ome_tiff.save_image(self.image,self.metadata, directory, file_name)
+                  
     
     def __validate(self, image, metadata):
 
         #Check if image is numpy array and metadata is dict
         if not isinstance(metadata, dict):
-            raise TypeError('metadata must be a dictionary!')
+            raise TypeError('Metadata must be a dictionary!')
         if not isinstance(image, np.ndarray):
-            raise TypeError('image must be a a NumPy array!')
+            raise TypeError('Image must be a a NumPy array!')
         
         #Check if metadata 'Type' field matches the type of the image
-        if self.__bit_depth_lookup[metadata['Type']]!=image.dtype:
-             raise TypeError('image data type does not mach the one specified in the metadata!')
+        #print('dsfgewewttergtrhtyhjtyjuyk;uihdhfhhhhhhhhhhh',image.dtype)
+        #if self.__BIT_DEPTH_LOOKUP[metadata['Type']]!=image.dtype:
+             #metadata['Type']=utils.value_to_key(self.__BIT_DEPTH_LOOKUP, image.dtype)
+             #raise TypeError('Image data type does not mach the one specified in the metadata!')
              
         #Check if number of channels and length of the name list is the same
         if 'SizeC' in metadata.keys():
@@ -157,19 +175,33 @@ class Image(object):
             
             if utils.length(metadata['Name'])!=metadata['SizeC']:
                 raise Exception('Length of Name list is invalid!','')
-            
-  
+        
+        #Rename duplicate names in the 'Name' field of the metadata
+        if isinstance(metadata['Name'], list):
+            metadata['Name']=utils.rename_duplicates(metadata['Name'])
+        else:
+            metadata['Name']=utils.rename_duplicates([metadata['Name']])[0]
+    
+        
+        #Check if dimension order is acceptable;
+        dimensions=self.__DIM_TRANSLATE.keys()
+        if len(metadata['DimensionOrder'])!=len(dimensions):
+            raise Exception('Dimension orders have to be a permutation of accepted dimensions: '+str(dimensions))
+        #Check if all letters are in the dimension and only once:
+        for dim in dimensions :
+            cnt=metadata['DimensionOrder'].count(dim)
+            if cnt!=1:
+                raise Exception('Dimension orders have to be a permutation of accepted dimensions! Number of occurrences of '+str(dim)+' is '+str(cnt))
+                
         #Check if image shape confers with the one in the metadata
         #Remove singleton dimensions
         shape_image=[val for val in image.shape if val!=1]
-        available_keys=[self.__dim_translate[dim] for dim in reversed(metadata['DimensionOrder']) if self.__dim_translate[dim] in metadata.keys()]
+        available_keys=[self.__DIM_TRANSLATE[dim] for dim in reversed(metadata['DimensionOrder']) if self.__DIM_TRANSLATE[dim] in metadata.keys()]
  
         shape_metadata=[metadata[key] for key in available_keys if metadata[key]!=1]
   
         if shape_image!=shape_metadata:
             raise Exception('shape information in metadata is not compattible to the image shape!','')
-    
-    
     
     @staticmethod
     def __slice_length(slice_object, object_length):
@@ -189,7 +221,7 @@ class Image(object):
     
     def set_metadata(self, key, value):
 
-        if key not in self.__protected:
+        if key not in self.__PROTECTED:
 
             if key in self.__metadata:
                 
@@ -213,30 +245,30 @@ class Image(object):
 
     
 
-    def append_to_dimension(self, image, dim):
+    def append_to_dimension(self, img, dim='C'):
 
         #Append names
-        self.__metadata['Name']=utils.concatenate(self.__metadata['Name'],image.get_metadata('Name'))
-        self.__metadata['SamplesPerPixel']=utils.concatenate(self.__metadata['SamplesPerPixel'], image.get_metadata('SamplesPerPixel'))
+        if dim=='C':
+            self.__metadata['Name']=utils.concatenate(self.__metadata['Name'],img.get_metadata('Name'))
+            self.__metadata['SamplesPerPixel']=utils.concatenate(self.__metadata['SamplesPerPixel'], img.get_metadata('SamplesPerPixel'))
  
         #Get original dimension order
         original_order=self.__metadata['DimensionOrder']
     
         #reshape image so the two confer
-        image.reorder(original_order)
+        img.reorder(original_order)
         
         #Get the index of the given dimension in the shape of the image
-        ind=len(original_order)-original_order.index('C')-1
+        ind=len(original_order)-original_order.index(dim)-1
         
-        self.__metadata[self.__dim_translate[dim]]=self.__metadata[self.__dim_translate[dim]]+image.get_metadata(self.__dim_translate[dim])
+        self.__metadata[self.__DIM_TRANSLATE[dim]]=self.__metadata[self.__DIM_TRANSLATE[dim]]+img.get_metadata(self.__DIM_TRANSLATE[dim])
 
-        self.image=np.concatenate((self.image,image.image), axis=ind)
+        self.image=np.concatenate((self.image,img.image), axis=ind)
        
        
         
     def roi_to_channel(self, index, value=1):
       
-
         if 'ROI' in self.__metadata.keys():
           
             #Generate roi list. If image has multiple ROI-s, metadata['ROI'] is a list.
@@ -251,20 +283,17 @@ class Image(object):
 
             #Get reversed dimension order
             order=self.__metadata['DimensionOrder'][::-1]            
-            
-            
+                        
             #Create shape tuple
             shape=[1]*len(order)
             for idx, dim in enumerate(order):
                 if dim!='C':
-                    shape[idx]=self.__metadata[self.__dim_translate[dim]]
+                    shape[idx]=self.__metadata[self.__DIM_TRANSLATE[dim]]
                 if dim=='C':
                     shape[idx]=1
                        
             shape=tuple(shape)
 
-
-            
             #create metadata dictionary for roi and set channel to 1
             roi_metadata=self.__metadata.copy()
             roi_metadata['SizeC']=1
@@ -285,14 +314,11 @@ class Image(object):
             
             img[:,:,:, cc_mod,rr_mod] = value
             
-            #print(img)
             #Create new ImageClass object
-            roi=Image(img, roi_metadata )
-            #print(roi.image)
-            #print(np.amax(roi.image))
-            self.append_to_dimension(roi, dim='C')
+            roi=ImageClass(img, roi_metadata )
 
-            
+            self.append_to_dimension(roi, dim='C')
+        
         else:
             raise Exception('No ROI available!', '')
                 
@@ -302,49 +328,25 @@ class Image(object):
         be the same length and confer with number of axes in ndarray!
         Reshape array so it has all the axes
         '''
-   
-        order=list(order)
-
-        dim_order_list=list(self.__metadata['DimensionOrder'])
-        order_final=order.copy()
-
+        order_current=list(reversed(list(self.__metadata['DimensionOrder'])))
+        order_final=list(reversed(list(order)))
+        
         #Cycle through image dimension order, check for differences in final order and replace
-        axis_number=len(order)-1
-        for i in range(len(dim_order_list)):
-           
-            if dim_order_list[i]!=order[i] :
-                axis_index_current=i
-                axis_index_final=order.index(dim_order_list[i])
-                self.__image=self.__image.swapaxes(axis_number-axis_index_current, axis_number-axis_index_final)
-                dim_order_list[axis_index_current], dim_order_list[axis_index_final] = dim_order_list[axis_index_final], dim_order_list[axis_index_current]
+        for idx, dim in enumerate(order_current):
+            
+            if dim!=order_final[idx] :
+                
+                index_current=idx
+                index_final=order_final.index(dim)
 
+                self.__image=self.__image.swapaxes(index_final,index_current)
+                
+                order_current[index_current], order_current[index_final] = order_current[index_final], order_current[index_current]
+                
         #Set final dimension order
-        self.__metadata['DimensionOrder']=''.join(order_final)
+        self.__metadata['DimensionOrder']=''.join(reversed(order_current))
 
-    
-    def merge_axes(ndarray, axis1, axis2):
-        '''
-        Merge two axes. First the axes are swaped so the two axes are besides each other
-        then the ndarray is linearized and reshaped.
-        '''
-        #Determine which axes is larger
-        largest_axis=max(axis1, axis2)
-        smallest_axis=min((axis1, axis2))
-        
-        #Generate final shape
-        shape=list(ndarray.shape)
-        shape[smallest_axis]=shape[smallest_axis]*shape[largest_axis]
-        del shape[largest_axis]
-        
-        #Swap axes so the two axes are besides each other
-        ax=largest_axis
-        while ax>smallest_axis:
-            ndarray=ndarray.swapaxes(ax,ax-1)
-            ax-=1
-        #Ravel, reshape and return result
-        return np.reshape(ndarray.ravel(), shape)
-    
-    def merge_axes2(ndarray, dim_order='SXYCZT', axis1='S', axis2='C'):
+    def __merge_axes(ndarray, dim_order='SXYCZT', axis1='S', axis2='C'):
         '''
         Merge two axes. First the axes are swaped so the two axes are besides each other
         then the ndarray is linearized and reshaped.
@@ -370,10 +372,15 @@ class Image(object):
     def z_projection (self):
         '''Needs to be implemented
         '''
+        #numpy.dstack(tup)[source]¶
         pass
     
-    def change_type(self):
-        pass
+    def as_type(self, dtype):
+        
+        if dtype!=self.metadata['Type']:
+            self.__image=self.image.astype(dtype)
+            self.__metadata['Type']=dtype
+
     
 
     def __expand_singleton_dimensions(self, ndarray, metadata):
@@ -384,9 +391,9 @@ class Image(object):
         shape=[1]*len(dim_order_list)
 
         for i, dim in enumerate(dim_order_list):
-            if dim in Image.__dim_translate.keys() and dim!='S':
+            if dim in ImageClass.__DIM_TRANSLATE.keys() and dim!='S':
                 
-                key=Image.__dim_translate[dim]
+                key=ImageClass.__DIM_TRANSLATE[dim]
              
                 if key in metadata.keys():
                     shape[i]=int(metadata[key])
@@ -394,6 +401,7 @@ class Image(object):
                     shape[i]=1
         
         shape.reverse()
+
         output=np.reshape(ndarray, tuple(shape))
         
         return output

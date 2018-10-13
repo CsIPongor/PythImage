@@ -1,3 +1,4 @@
+from skimage.external.tifffile import TiffFile
 import collections
 from xml.etree import cElementTree as etree 
 import traceback
@@ -39,6 +40,20 @@ class lazyattr(object):
         return value 
              
 
+def get_image_source(path):
+    '''
+    Return the image type. Currently only imageJ and ome Tiff files are supported.
+    '''
+          
+    with TiffFile(path) as tif:
+             
+        if tif.is_imagej:
+            output='imagej'
+        
+        if tif.is_imagej:
+            output='ome'
+            
+    return output
 
 def length(a):
     '''
@@ -164,3 +179,36 @@ def concatenate(a,b):
 
 def list_of(lst, object_type):
     return any((isinstance(x, object_type) for x in lst))
+
+
+def value_to_key(dictionary, val):
+    
+    #Get the ocurrences of val among dictionary values
+    count=sum(value == val for value in dictionary.values())
+    #version 2: count=sum(map((val).__eq__, dictionary.values()))
+    
+    #If value is not in dictionary.values raise exception
+    if count==0:
+        raise LookupError('Value %s is not in dictionary'.format(str(val)))
+    if count>1:
+        raise LookupError('More than one key have value %s!'.format(str(val)))
+    
+    #get value
+    #version 2: list(dictionary.keys())[list(dictionary.values()).index(val)]
+    for key, value in dictionary.items():
+        if value == val:
+            return key
+        
+def rename_duplicates(string_list):
+    '''Processes a list of strings. If list has duplicate elements an index is added to it.
+    '''
+    if isinstance(string_list, str) or not isinstance(string_list, list):
+        raise Exception('Object must be list of strings!')
+    
+    output = []
+    for idx, val in enumerate(string_list):
+        totalcount = string_list.count(val)
+        count = string_list[:idx].count(val)
+        output.append(val +'_'+ str(count + 1) if totalcount > 1 else val)
+    
+    return output
