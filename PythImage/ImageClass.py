@@ -143,10 +143,8 @@ class ImageClass(object):
         '''        
         #Load image and create simplified metadata dictionary
         self.reorder('XYZCT')
-        print('#####FFFFFFFFFF########UUUUUUUUU##########C#############KKKKKKKKKKKKKKKK')
         print(self)
         print(self.metadata)
-        print('#####FFFFFFFFFF########UUUUUUUUU##########C#############KKKKKKKKKKKKKKKK')
         ome_tiff.save_image(self.image,self.metadata, directory, file_name)
                   
     

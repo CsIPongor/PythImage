@@ -210,7 +210,7 @@ def save_image(image, metadata, directory, file_name):
     '''
     Save Image. Metadata not saved currently!!
     ''' 
-    print(metadata_to_ome(metadata, file_name))
+
     if metadata["DimensionOrder"]=='XYZCT':
         
         with TiffWriter(os.path.join(directory, file_name)) as tif:
