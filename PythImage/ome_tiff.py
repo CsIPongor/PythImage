@@ -43,7 +43,7 @@ def load_image(path):
       
         #Load image into nd array
         images = tif.asarray()
-        print(tif[0].tags['image_description'].value)
+
         #Load metadata
         ome_metadata=utils.xml2dict(tif[0].tags['image_description'].value, sanitize=True, prefix=None)
     
@@ -64,22 +64,23 @@ def convert_metadata(metadata_dict):
    
     #Add optional keys if present
     unit_keys=['SizeT', 'SizeC', 'SizeZ', 'SizeX', 'SizeY','PhysicalSizeX', 'PhysicalSizeXUnit', 'PhysicalSizeY', 'PhysicalSizeYUnit', 'PhysicalSizeZ', 'PhysicalSizeZUnit', 'TimeIncrement','TimeIncrementUnit','DimensionOrder','Type']
+    
     for key in unit_keys:
         if key in pixels_dict.keys():
             metadata_dict_out[key]=pixels_dict[key]
 
-  
     if isinstance(pixels_dict['Channel'], list): 
+        
         metadata_dict_out['SamplesPerPixel']=[1 for n in range(len(pixels_dict['Channel']))]
-        for dic in pixels_dict['Channel'] :
+
+        for idx, dic in enumerate(pixels_dict['Channel']):
             if 'SamplesPerPixel' in dic.keys():
-                metadata_dict_out['SamplesPerPixel']=dic['SamplesPerPixel']
+                metadata_dict_out['SamplesPerPixel'][idx]=dic['SamplesPerPixel']
 
         name_list=[dic['Name'] if 'Name' in dic.keys() else 'Ch'+str(index+1) for index, dic in enumerate(pixels_dict['Channel'])]
+        
         metadata_dict_out['Name']=[]
-
         for idx, name in enumerate(name_list):
-
             if metadata_dict_out['SamplesPerPixel'][idx]==1:
                 metadata_dict_out['Name'].append(name)
             else: 
