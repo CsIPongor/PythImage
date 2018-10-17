@@ -1,25 +1,30 @@
 import numpy as np
 import copy
-#from .RoiClass import Roi 
-from . import imagej_tiff 
-from . import ome_tiff
+
+from .imagej_tiff import  load_image as load_imagej
+from .imagej_tiff import  convert_metadata as convert_imagej_metadata
+
+from .ome_tiff import SIZE_KEYS, OTHER_KEYS, DIM_TRANSLATE, UNIT_KEYS, UNITS
+from .ome_tiff import convert_units
+from .ome_tiff import load_image as load_ome
+from .ome_tiff import save_image as save_ome
+from .ome_tiff import convert_metadata as convert_ome_metadata
+
 from .roi import roi_to_coordinates
 from . import utils
 
 
-
-##Add channel, remove channel, extract channel etc.
+##!!!!!!!!!!!!Add channel, remove channel, extract channel etc.
 class ImageClass(object):
     
     #!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!TOBE FIXED return objects cpy or deepcopy etc.
     
     '''
     '''
-    __PROTECTED=ome_tiff.SIZE_KEYS+ome_tiff.OTHER_KEYS
-    __DIM_TRANSLATE={'T':'SizeT', 'C':'SizeC', 'Z':'SizeZ', 'X':'SizeX', 'Y': 'SizeY'}#, 'S':'SamplesPerPixel'}
+    __PROTECTED=SIZE_KEYS+OTHER_KEYS
+    __DIM_TRANSLATE=DIM_TRANSLATE
 
-    
-    
+
     def __init__(self, ndarray, metadata):
 
         #Reshape image so it contains all dimensions
@@ -97,18 +102,18 @@ class ImageClass(object):
         def ome(path):
         
             #Load image and create simplified metadata dictionary
-            image, ome_metadata=ome_tiff.load_image(path)
+            image, ome_metadata=load_ome(path)
     
-            metadata=ome_tiff.convert_metadata(ome_metadata)
+            metadata=convert_ome_metadata(ome_metadata)
             
             return image, metadata
     
   
         def imagej(path):
             #Load image and create simplified metadata dictionary
-            image, imagej_metadata=imagej_tiff.load_image(path)
+            image, imagej_metadata=load_imagej(path)
             
-            metadata=imagej_tiff.convert_metadata(imagej_metadata) 
+            metadata=convert_imagej_metadata(imagej_metadata) 
             
             return image, metadata
         
@@ -143,7 +148,7 @@ class ImageClass(object):
         '''        
         #Load image and create simplified metadata dictionary
         self.reorder('XYZCT')
-        ome_tiff.save_image(self.image,self.metadata, directory, file_name)
+        save_ome(self.image,self.metadata, directory, file_name)
                   
     
     def __validate(self, image, metadata):
@@ -202,7 +207,7 @@ class ImageClass(object):
             raise Exception('shape information in metadata is not compattible to the image shape!','')
             
         #Check units: trsanslate to OME compattible unit or else delete metadata      
-        metadata=ome_tiff.convert_units(metadata, ome_tiff.UNIT_KEYS, ome_tiff.UNITS) 
+        metadata=convert_units(metadata, UNIT_KEYS, UNITS) 
     
     @staticmethod
     def __slice_length(slice_object, object_length):
@@ -392,9 +397,9 @@ class ImageClass(object):
         shape=[1]*len(dim_order_list)
 
         for i, dim in enumerate(dim_order_list):
-            if dim in ImageClass.__DIM_TRANSLATE.keys() and dim!='S':
+            if dim in self.__DIM_TRANSLATE.keys() and dim!='S':
                 
-                key=ImageClass.__DIM_TRANSLATE[dim]
+                key=self.__DIM_TRANSLATE[dim]
              
                 if key in metadata.keys():
                     shape[i]=int(metadata[key])

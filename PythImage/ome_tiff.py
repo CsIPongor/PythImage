@@ -19,6 +19,8 @@ import warnings
 
 
 DIM_ORDERS=['XYZCT','XYZTC','XYCTZ','XYCZT','XYTCZ','XYTZC']
+DIM_TRANSLATE={'T':'SizeT', 'C':'SizeC', 'Z':'SizeZ', 'X':'SizeX', 'Y': 'SizeY'}#, 'S':'SamplesPerPixel'}
+
 BIT_DEPTH_LOOKUP={'uint8':'uint8','uint16':'uint16', 'uint32':'uint32', 'float':'float32','double':'float64'}	
 
 OTHER_KEYS=['DimensionOrder','Type','SamplesPerPixel']
@@ -26,7 +28,7 @@ UNIT_KEYS=['PhysicalSizeZUnit', 'PhysicalSizeXUnit', 'PhysicalSizeYUnit', 'TimeI
 SIZE_KEYS=['SizeT', 'SizeC', 'SizeZ', 'SizeX', 'SizeY']
 PHYSICAL_SIZE_KEYS=['PhysicalSizeX', 'PhysicalSizeY', 'PhysicalSizeZ','TimeIncrement']
 
-__LENGTH_UNITS={'Ym':['yottameter','yottameters','Yottameter','Yottameters','Ym'],
+LENGTH_UNITS={'Ym':['yottameter','yottameters','Yottameter','Yottameters','Ym'],
      'Zm':['zettameter','zettameters','Zm'],
      'Em':['exameter', 'exameters', 'em','Em'],
      'Pm':['petameter','petameters','Pm'],
@@ -60,7 +62,7 @@ __LENGTH_UNITS={'Ym':['yottameter','yottameters','Yottameter','Yottameters','Ym'
      'pt':['typographical point','Point','point', 'Pt','Pts','pts','pt'],
      'pixel':['pixel','Pixel','pix','Pix','px','Px','pixel']}
 
-__TIME_UNITS={'Ys':['yottasecond','yottaseconds','Ys'],
+TIME_UNITS={'Ys':['yottasecond','yottaseconds','Ys'],
     'Zs':['zettasecond','zettaseconds','Zs'],
     'Es':['exasecond','exaseconds','Es'],
     'Ps':['petasecond','petaseconds', 'Ps'],
@@ -85,7 +87,7 @@ __TIME_UNITS={'Ys':['yottasecond','yottaseconds','Ys'],
     'h':['hour','hours','h','hr','hrs','Hr','Hrs'],
     'd':['day','days','d']}
 
-UNITS= {**__TIME_UNITS, **__LENGTH_UNITS}
+UNITS= {**TIME_UNITS, **LENGTH_UNITS}
 
 
 def load_image(path):
