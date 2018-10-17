@@ -15,9 +15,9 @@ class ImageClass(object):
     
     '''
     '''
-    __PROTECTED=['SizeT', 'SizeC','SizeZ', 'SizeX','SizeY', 'SamplesPerPixel', 'Type', 'DimensionOrder']
+    __PROTECTED=ome_tiff.SIZE_KEYS+ome_tiff.OTHER_KEYS
     __DIM_TRANSLATE={'T':'SizeT', 'C':'SizeC', 'Z':'SizeZ', 'X':'SizeX', 'Y': 'SizeY'}#, 'S':'SamplesPerPixel'}
-    #__BIT_DEPTH_LOOKUP=ome_tiff.BIT_DEPTH_LOOKUP
+
     
     
     def __init__(self, ndarray, metadata):
@@ -89,7 +89,7 @@ class ImageClass(object):
         self.__metadata=value
   
     @classmethod              
-    def load(cls, path, file_type=None):
+    def load(cls, path, file_type='ome'):
         '''
         Load image stack from path. RGB images are not supported currently and only first frame is returned.
         '''
@@ -181,7 +181,6 @@ class ImageClass(object):
         else:
             metadata['Name']=utils.rename_duplicates([metadata['Name']])[0]
     
-        
         #Check if dimension order is acceptable;
         dimensions=self.__DIM_TRANSLATE.keys()
         if len(metadata['DimensionOrder'])!=len(dimensions):
@@ -201,6 +200,9 @@ class ImageClass(object):
   
         if shape_image!=shape_metadata:
             raise Exception('shape information in metadata is not compattible to the image shape!','')
+            
+        #Check units: trsanslate to OME compattible unit or else delete metadata      
+        metadata=ome_tiff.convert_units(metadata, ome_tiff.UNIT_KEYS, ome_tiff.UNITS) 
     
     @staticmethod
     def __slice_length(slice_object, object_length):
