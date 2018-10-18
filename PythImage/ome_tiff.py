@@ -300,6 +300,7 @@ def metadata_to_ome (metadata, file_name):
 def convert_units(metadata, unit_keys, unit_dict):
     #Check units: trsanslate to OME compattible unit or else delete metadata  
     for un in unit_keys:
+        
         #Try to translate unit
         if un in metadata.keys():
             
@@ -312,10 +313,10 @@ def convert_units(metadata, unit_keys, unit_dict):
             else:
                 unit=metadata[un]
         
-        #If unit could be translated change metadata or else delete
-        if unit==None:
-            del metadata[un]
-        else:
-            metadata[un]=unit
+            #If unit could be translated change metadata or else delete
+            if unit==None:
+                del metadata[un]
+            else:
+                metadata[un]=unit
             
     return  metadata 
