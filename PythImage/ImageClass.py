@@ -94,7 +94,7 @@ class ImageClass(object):
         self.__metadata=value
   
     @classmethod              
-    def load(cls, path, file_type='ome'):
+    def load(cls, path, file_type=None):
         '''
         Load image stack from path. RGB images are not supported currently and only first frame is returned.
         '''
